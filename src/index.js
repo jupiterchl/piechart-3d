@@ -1,22 +1,40 @@
 import './index.scss';
-import Pie from './plugin';
+import pie from './plugin';
 
 function init() {
-  const data = [
-    { label: 'A类物品', value: 32 },
-    { label: 'B类物品', value: 44 },
-    { label: 'C类物品', value: 80 },
-    { label: 'D类物品', value: 40 },
-    { label: 'E类物品', value: 66 },
-  ];
+  const myPie = pie.init(document.querySelector('.chart'));
+  myPie.setOption(randomCfg());
+  // console.log(myPie);
 
-  new Pie(document.querySelector('.chart'), {
-    radius: [100, 200], // 半径：[内径, 外径]
-    tilt: 40, // 倾角
-    height: 50, // 高度
+  document.getElementById('click').addEventListener(
+    'click',
+    () => {
+      myPie.setOption(randomCfg());
+    },
+    false
+  );
+}
+
+function randomCfg() {
+  const genData = function () {
+    return [
+      { label: 'A类物品', value: ~~(Math.random() * 100) + 20 },
+      { label: 'B类物品', value: ~~(Math.random() * 100) + 20 },
+      { label: 'C类物品', value: ~~(Math.random() * 100) + 20 },
+      { label: 'D类物品', value: ~~(Math.random() * 100) + 20 },
+      { label: 'E类物品', value: ~~(Math.random() * 100) + 20 },
+    ];
+  };
+
+  const cfg = {
+    radius: [~~(Math.random() * 100), ~~(Math.random() * 80) + 120], // 半径：[内径, 外径]
+    tilt: ~~(Math.random() * 30) + 30, // 倾角
+    height: ~~(Math.random() * 50) + 50, // 高度
     colors: ['#1A6AA3', '#A5789E', '#FF6D54', '#FFC154', '#47B39C'], // 颜色
-    data, // 数据
-  });
+    data: genData(), // 数据
+  };
+
+  return cfg;
 }
 
 init();

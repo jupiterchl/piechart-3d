@@ -1,28 +1,180 @@
+/* eslint-disable no-invalid-this */
 import * as d3 from 'd3';
 import cloneDeep from 'lodash.clonedeep';
 
-function lg(obj) {
-  console.log(JSON.stringify(obj, null, 2));
+function lg(...args) {
+  args.forEach((arg) => {
+    if (['[object Object]', '[object Array]'].indexOf(Object.prototype.toString.call(arg)) > -1) {
+      console.log(JSON.stringify(arg, null, 2));
+    } else {
+      console.log(arg);
+    }
+  });
 }
 
-class Pie {
-  constructor(el, options) {
-    const defaultOptions = {
-      stroke: null,
-      fill: null,
-    };
+const defultOptions = {
+  stroke: null,
+  fill: null,
+};
 
+class Pie {
+  constructor(el) {
     this.el = el;
-    this.options = { ...defaultOptions, ...options };
-    this.init();
   }
 
-  init() {
+  setOption(options) {
+    this.options = { ...defultOptions, ...options };
     this.initData();
+    // this.drawPoints();
+    // this.drawPies();
     this.draw();
+    this.transitionDraw();
   }
 
   initData() {
+    this.oldData = d3
+      .pie()
+      .sort(null)
+      .value((v) => v.value)(this.options.data.map((v) => ({ ...v, value: 0 })));
+
+    this.data = d3
+      .pie()
+      .sort(null)
+      .value((v) => v.value)(this.options.data);
+
+    // lg(this.oldData, this.data);
+  }
+
+  draw() {
+    const node = d3.select(this.el);
+
+    // 如果已经有子节点，清除所有子节点
+    if (!node.empty()) {
+      node.html('');
+    }
+
+    // 添加svg子节点
+    const svg = node.append('svg').attr('width', '100%').attr('height', '100%');
+    const { width, height } = svg.node().getBoundingClientRect();
+
+    // 添加一个居中的分组，并作为后续绘制的根节点
+    this.root = svg.append('g').attr('transform', `translate(${width / 2}, ${height / 2})`);
+
+    // 添加饼图分组
+    let pieGroup = this.root.append('g').attr('class', 'pieGroup');
+    const that = this;
+
+    pieGroup
+      .selectAll('.pie')
+      .data(this.oldData)
+      .enter()
+      .append('g')
+      .attr('class', 'pie')
+      .each(function (d, i) {
+        this.color = that.getColor(i);
+      })
+      .selectAll('.pieSlice')
+      .data((d) => Array.from({ length: 6 }, () => d))
+      .enter()
+      .append('path')
+      .attr('class', 'pieSlice')
+      .attr('stroke', function () {
+        return this.parentNode.color;
+      })
+      .attr('fill', function () {
+        return this.parentNode.color;
+      })
+      .attr('d', this.drawPie.bind(this))
+      .each(function (d) {
+        this._d = d;
+      });
+
+    this.pieGroup = pieGroup;
+  }
+
+  transitionDraw() {
+    const that = this;
+    this.pieGroup
+      .selectAll('.pie')
+      .data(this.data)
+      .selectAll('.pieSlice')
+      .data((d) => Array.from({ length: 6 }, () => d))
+      .transition()
+      .duration(750)
+      .attrTween('d', function (d, i) {
+        const _d = this._d;
+        const ip = d3.interpolate(_d, d);
+        return (t) => {
+          return that.drawPie(ip(t), i);
+        };
+      });
+  }
+
+  getColor(i) {
+    const { colors } = this.options;
+    return colors[i % colors.length];
+  }
+
+  drawPie(d, i) {
+    const { radius, height, tilt } = this.options;
+    const zoom = { x: 1, y: (90 - tilt) / 90 };
+    const h = height * Math.sin((tilt * Math.PI) / 180);
+    const offsetY = h / 2;
+    const r = radius.map((v) => ({ x: v * zoom.x, y: v * zoom.y }));
+
+    // 内圈
+    const inner = {
+      radius: r[0],
+      startPoint: {
+        x: r[0].x * Math.cos(d.startAngle),
+        y: r[0].y * Math.sin(d.startAngle) + offsetY,
+      },
+      endPoint: {
+        x: r[0].x * Math.cos(d.endAngle),
+        y: r[0].y * Math.sin(d.endAngle) + offsetY,
+      },
+    };
+    // 外圈
+    const outer = {
+      radius: r[1],
+      startPoint: {
+        x: r[1].x * Math.cos(d.startAngle),
+        y: r[1].y * Math.sin(d.startAngle) + offsetY,
+      },
+      endPoint: {
+        x: r[1].x * Math.cos(d.endAngle),
+        y: r[1].y * Math.sin(d.endAngle) + offsetY,
+      },
+    };
+
+    return [
+      'M',
+      inner.startPoint.x,
+      inner.startPoint.y,
+      'A',
+      inner.radius.x,
+      inner.radius.y,
+      0,
+      this.checkArcFlag(d.startAngle, d.endAngle),
+      1,
+      inner.endPoint.x,
+      inner.endPoint.y,
+      'L',
+      outer.endPoint.x,
+      outer.endPoint.y,
+      'A',
+      outer.radius.x,
+      outer.radius.y,
+      0,
+      this.checkArcFlag(d.startAngle, d.endAngle),
+      0,
+      outer.startPoint.x,
+      outer.startPoint.y,
+      'z',
+    ].join(' ');
+  }
+
+  initData2() {
     const { radius, height, tilt, colors, data } = this.options;
     const zoom = { x: 1, y: (90 - tilt) / 90 };
     const h = height * Math.sin((tilt * Math.PI) / 180);
@@ -36,49 +188,49 @@ class Pie {
 
     const sum = _data.reduce((s, b) => s + b.value, 0);
 
-    _data.forEach((d, i) => {
-      d.options = {
-        offsetY, // 底面Y轴偏移量
-        height: h * (1 + (10 * d.value) / sum), // 高度
-        color: colors[i % colors.length], // 颜色
-        // 内圈
-        inner: {
-          radius: r[0],
-          startPoint: {
-            x: r[0].x * Math.cos(d.startAngle),
-            y: r[0].y * Math.sin(d.startAngle) + offsetY,
-          },
-          endPoint: {
-            x: r[0].x * Math.cos(d.endAngle),
-            y: r[0].y * Math.sin(d.endAngle) + offsetY,
-          },
-        },
-        // 外圈
-        outer: {
-          radius: r[1],
-          startPoint: {
-            x: r[1].x * Math.cos(d.startAngle),
-            y: r[1].y * Math.sin(d.startAngle) + offsetY,
-          },
-          endPoint: {
-            x: r[1].x * Math.cos(d.endAngle),
-            y: r[1].y * Math.sin(d.endAngle) + offsetY,
-          },
-        },
-      };
-    });
+    // _data.forEach((d, i) => {
+    //   d.options = {
+    //     offsetY, // 底面Y轴偏移量
+    //     height: h, // 高度
+    //     color: colors[i % colors.length], // 颜色
+    //     // 内圈
+    //     inner: {
+    //       radius: r[0],
+    //       startPoint: {
+    //         x: r[0].x * Math.cos(d.startAngle),
+    //         y: r[0].y * Math.sin(d.startAngle) + offsetY,
+    //       },
+    //       endPoint: {
+    //         x: r[0].x * Math.cos(d.endAngle),
+    //         y: r[0].y * Math.sin(d.endAngle) + offsetY,
+    //       },
+    //     },
+    //     // 外圈
+    //     outer: {
+    //       radius: r[1],
+    //       startPoint: {
+    //         x: r[1].x * Math.cos(d.startAngle),
+    //         y: r[1].y * Math.sin(d.startAngle) + offsetY,
+    //       },
+    //       endPoint: {
+    //         x: r[1].x * Math.cos(d.endAngle),
+    //         y: r[1].y * Math.sin(d.endAngle) + offsetY,
+    //       },
+    //     },
+    //   };
+    // });
 
     // lg(_data);
 
     this.data = _data;
   }
 
-  draw() {
+  draw2() {
     const svg = d3.select(this.el).append('svg').attr('width', '100%').attr('height', '100%');
     const { width, height } = svg.node().getBoundingClientRect();
     this.root = svg.append('g').attr('transform', `translate(${width / 2}, ${height / 2})`);
 
-    this.drawPoints();
+    // this.drawPoints();
     this.drawPies();
   }
 
@@ -105,9 +257,7 @@ class Pie {
     });
   }
 
-  drawPies() {
-    const pieGroup = this.root.append('g').attr('class', 'pieGroup');
-
+  genShapes() {
     const shapes = this.data.reduce(
       (s, d) => {
         const {
@@ -291,13 +441,23 @@ class Pie {
       ...shapes.outerSide,
     ];
 
+    return _shapes;
+  }
+
+  drawPies() {
     const { stroke, fill } = this.options;
+    let pieGroup = this.root.select('.pieGroup');
+
+    if (pieGroup.empty()) {
+      pieGroup = this.root.append('g').attr('class', 'pieGroup');
+    }
 
     pieGroup
       .selectAll('path')
-      .data(_shapes)
+      .data(this.genShapes())
       .enter()
       .append('path')
+      .attr('d', (p) => p.path.join(' '))
       .attr('stroke', (p) => {
         let color = d3.color(p.d.options.color);
         if (typeof stroke === 'function') {
@@ -316,7 +476,9 @@ class Pie {
           return color.darker(0.75);
         }
       })
-      .attr('d', (p) => p.path.join(' '));
+      .attr('d', (p) => p.path.join(' '))
+      .exit()
+      .remove();
   }
 
   dataSlice(d) {
@@ -372,4 +534,8 @@ class Pie {
   }
 }
 
-export default Pie;
+export default {
+  init(el) {
+    return new Pie(el);
+  },
+};
