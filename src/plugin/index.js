@@ -182,219 +182,204 @@ class Pie {
   }
 
   genShapes() {
-    const shapes = this.data.reduce(
-      (s, d) => {
+    const shapes = this.data.reduce((s, d) => {
+      const {
+        startAngle,
+        endAngle,
+        options: { height, inner, outer },
+      } = d;
+      const slices = this.dataSlice(d);
+
+      // 起点位于左半边，则需要绘制起始侧面
+      if (startAngle > Math.PI / 2 && startAngle < (3 * Math.PI) / 2) {
+        const _d = slices[0];
+        const zIndex = this.calcZIndex(_d.startAngle, _d.endAngle);
+        const startSide = [
+          'M',
+          inner.startPoint.x,
+          inner.startPoint.y,
+          'L',
+          outer.startPoint.x,
+          outer.startPoint.y,
+          'v',
+          -height,
+          'L',
+          inner.startPoint.x,
+          inner.startPoint.y - height,
+          'z',
+        ];
+
+        if (startAngle >= Math.PI) {
+          s.push({ type: 'backSide', d, path: startSide, zIndex });
+        } else {
+          s.push({ type: 'frontSide', d, path: startSide, zIndex });
+        }
+      }
+
+      // 终点位于右半边，则需要绘制结尾侧面
+      if (endAngle < Math.PI / 2 || endAngle > (3 * Math.PI) / 2) {
+        const _d = slices[slices.length - 1];
+        const zIndex = this.calcZIndex(_d.startAngle, _d.endAngle);
+        const endSide = [
+          'M',
+          inner.endPoint.x,
+          inner.endPoint.y,
+          'L',
+          outer.endPoint.x,
+          outer.endPoint.y,
+          'v',
+          -height,
+          'L',
+          inner.endPoint.x,
+          inner.endPoint.y - height,
+          'z',
+        ];
+
+        if (endAngle >= Math.PI) {
+          s.push({ type: 'backSide', d, path: endSide, zIndex });
+        } else {
+          s.push({ type: 'frontSide', d, path: endSide, zIndex });
+        }
+      }
+
+      // 绘制内外圈和顶面时需要考虑左右边界进行切割
+      slices.forEach((_d) => {
+        const {
+          startAngle: startAngleW,
+          endAngle: endAngleW,
+          options: { height: heightW, inner: innerW, outer: outerW },
+        } = d;
         const {
           startAngle,
           endAngle,
           options: { height, inner, outer },
-        } = d;
+        } = _d;
 
-        // 起点位于左半边，则需要绘制起始侧面
-        if (startAngle > Math.PI / 2 && startAngle < (3 * Math.PI) / 2) {
-          const startSide = [
+        const zIndex = this.calcZIndex(startAngle, endAngle);
+
+        // 位于上半边，则需要绘制内圈
+        if (startAngle >= Math.PI) {
+          const innerSide = [
             'M',
             inner.startPoint.x,
             inner.startPoint.y,
-            'L',
-            outer.startPoint.x,
-            outer.startPoint.y,
+            'A',
+            inner.radius.x,
+            inner.radius.y,
+            0,
+            this.checkArcFlag(startAngle, endAngle),
+            1,
+            inner.endPoint.x,
+            inner.endPoint.y,
             'v',
             -height,
-            'L',
+            'A',
+            inner.radius.x,
+            inner.radius.y,
+            0,
+            this.checkArcFlag(startAngle, endAngle),
+            0,
             inner.startPoint.x,
             inner.startPoint.y - height,
             'z',
           ];
 
-          if (startAngle >= Math.PI) {
-            s.backSide.push({ type: 'backSide', d, path: startSide, pos: 's' });
-          } else {
-            s.frontSide.push({ type: 'frontSide', d, path: startSide, pos: 's' });
-          }
+          s.push({ type: 'innerSide', d, path: innerSide, zIndex });
+
+          // 后顶面绘制完整，以解决接缝处可能出现的白线问题
+          const backTop = [
+            'M',
+            innerW.startPoint.x,
+            innerW.startPoint.y - heightW,
+            'A',
+            innerW.radius.x,
+            innerW.radius.y,
+            0,
+            this.checkArcFlag(startAngleW, endAngleW),
+            1,
+            innerW.endPoint.x,
+            innerW.endPoint.y - heightW,
+            'L',
+            outerW.endPoint.x,
+            outerW.endPoint.y - heightW,
+            'A',
+            outerW.radius.x,
+            outerW.radius.y,
+            0,
+            this.checkArcFlag(startAngleW, endAngleW),
+            0,
+            outerW.startPoint.x,
+            outerW.startPoint.y - heightW,
+            'z',
+          ];
+
+          s.push({ type: 'backTop', d, path: backTop, zIndex });
         }
 
-        // 终点位于右半边，则需要绘制结尾侧面
-        if (endAngle < Math.PI / 2 || endAngle > (3 * Math.PI) / 2) {
-          const endSide = [
+        // 位于下半边，则需要绘制外圈
+        if (endAngle <= Math.PI) {
+          const outerSide = [
             'M',
-            inner.endPoint.x,
-            inner.endPoint.y,
-            'L',
+            outer.startPoint.x,
+            outer.startPoint.y,
+            'A',
+            outer.radius.x,
+            outer.radius.y,
+            0,
+            this.checkArcFlag(startAngle, endAngle),
+            1,
             outer.endPoint.x,
             outer.endPoint.y,
             'v',
             -height,
-            'L',
-            inner.endPoint.x,
-            inner.endPoint.y - height,
+            'A',
+            outer.radius.x,
+            outer.radius.y,
+            0,
+            this.checkArcFlag(startAngle, endAngle),
+            0,
+            outer.startPoint.x,
+            outer.startPoint.y - height,
             'z',
           ];
 
-          if (endAngle >= Math.PI) {
-            s.backSide.push({ type: 'backSide', d, path: endSide, pos: 'e' });
-          } else {
-            s.frontSide.push({ type: 'frontSide', d, path: endSide, pos: 'e' });
-          }
+          s.push({ type: 'outerSide', d, path: outerSide, zIndex });
+
+          const frontTop = [
+            'M',
+            inner.startPoint.x,
+            inner.startPoint.y - height,
+            'A',
+            inner.radius.x,
+            inner.radius.y,
+            0,
+            this.checkArcFlag(startAngle, endAngle),
+            1,
+            inner.endPoint.x,
+            inner.endPoint.y - height,
+            'L',
+            outer.endPoint.x,
+            outer.endPoint.y - height,
+            'A',
+            outer.radius.x,
+            outer.radius.y,
+            0,
+            this.checkArcFlag(startAngle, endAngle),
+            0,
+            outer.startPoint.x,
+            outer.startPoint.y - height,
+            'z',
+          ];
+
+          s.push({ type: 'frontTop', d, path: frontTop, zIndex });
         }
+      });
 
-        // 绘制边时需要考虑左右边界进行切割
-        this.dataSlice(d).forEach((d) => {
-          const {
-            startAngle,
-            endAngle,
-            options: { height, inner, outer },
-          } = d;
+      return s;
+    }, []);
 
-          // 位于上半边，则需要绘制内圈
-          if (startAngle >= Math.PI) {
-            const innerSide = [
-              'M',
-              inner.startPoint.x,
-              inner.startPoint.y,
-              'A',
-              inner.radius.x,
-              inner.radius.y,
-              0,
-              this.checkArcFlag(startAngle, endAngle),
-              1,
-              inner.endPoint.x,
-              inner.endPoint.y,
-              'v',
-              -height,
-              'A',
-              inner.radius.x,
-              inner.radius.y,
-              0,
-              this.checkArcFlag(startAngle, endAngle),
-              0,
-              inner.startPoint.x,
-              inner.startPoint.y - height,
-              'z',
-            ];
-
-            s.innerSide.push({ type: 'innerSide', d, path: innerSide });
-
-            const backTop = [
-              'M',
-              inner.startPoint.x,
-              inner.startPoint.y - height,
-              'A',
-              inner.radius.x,
-              inner.radius.y,
-              0,
-              this.checkArcFlag(startAngle, endAngle),
-              1,
-              inner.endPoint.x,
-              inner.endPoint.y - height,
-              'L',
-              outer.endPoint.x,
-              outer.endPoint.y - height,
-              'A',
-              outer.radius.x,
-              outer.radius.y,
-              0,
-              this.checkArcFlag(startAngle, endAngle),
-              0,
-              outer.startPoint.x,
-              outer.startPoint.y - height,
-              'z',
-            ];
-
-            s.backTop.push({ type: 'backTop', d, path: backTop });
-          }
-
-          // 位于下半边，则需要绘制外圈
-          if (endAngle <= Math.PI) {
-            const outerSide = [
-              'M',
-              outer.startPoint.x,
-              outer.startPoint.y,
-              'A',
-              outer.radius.x,
-              outer.radius.y,
-              0,
-              this.checkArcFlag(startAngle, endAngle),
-              1,
-              outer.endPoint.x,
-              outer.endPoint.y,
-              'v',
-              -height,
-              'A',
-              outer.radius.x,
-              outer.radius.y,
-              0,
-              this.checkArcFlag(startAngle, endAngle),
-              0,
-              outer.startPoint.x,
-              outer.startPoint.y - height,
-              'z',
-            ];
-
-            s.outerSide.push({ type: 'outerSide', d, path: outerSide });
-
-            const frontTop = [
-              'M',
-              inner.startPoint.x,
-              inner.startPoint.y - height,
-              'A',
-              inner.radius.x,
-              inner.radius.y,
-              0,
-              this.checkArcFlag(startAngle, endAngle),
-              1,
-              inner.endPoint.x,
-              inner.endPoint.y - height,
-              'L',
-              outer.endPoint.x,
-              outer.endPoint.y - height,
-              'A',
-              outer.radius.x,
-              outer.radius.y,
-              0,
-              this.checkArcFlag(startAngle, endAngle),
-              0,
-              outer.startPoint.x,
-              outer.startPoint.y - height,
-              'z',
-            ];
-
-            s.frontTop.push({ type: 'frontTop', d, path: frontTop });
-          }
-        });
-
-        return s;
-      },
-      { backSide: [], backTop: [], innerSide: [], frontSide: [], outerSide: [], frontTop: [] }
-    );
-
-    // 前后侧面按Y轴排序
-    [shapes.backSide, shapes.frontSide].forEach((v) => {
-      v.sort(
-        (a, b) =>
-          a.d.options.inner[a.pos === 's' ? 'startPoint' : 'endPoint'].y -
-          b.d.options.inner[b.pos === 's' ? 'startPoint' : 'endPoint'].y
-      );
-    });
-
-    // 顶面按高度排序
-    [shapes.backTop, shapes.frontTop].forEach((v) => {
-      v.sort((a, b) => a.d.options.height - b.d.options.height);
-    });
-
-    const compareFn = (v) => {
-      if (/side$/i.test(v.type)) {
-        return v.d.options.inner[v.pos === 's' ? 'startPoint' : 'endPoint'].y;
-      }
-      return (v.d.options.inner.startPoint.y + v.d.options.inner.endPoint.y) / 2;
-    };
-
-    const backSlices = [...shapes.backSide, ...shapes.backTop].sort((a, b) => {
-      return compareFn(a) - compareFn(b);
-    });
-
-    // 类型优先级由低到高依次为：后侧面、后顶面、内圈、前侧面、前顶面、外圈
-    const _shapes = [...backSlices, ...shapes.innerSide, ...shapes.frontSide, ...shapes.frontTop, ...shapes.outerSide];
+    // 按优先级zIndex排序
+    const _shapes = shapes.sort((a, b) => (a.zIndex > b.zIndex ? 1 : a.zIndex < b.zIndex ? -1 : 0));
 
     return _shapes;
   }
@@ -426,6 +411,8 @@ class Pie {
       // 合并
       .merge(path)
       .attr('stroke', (p) => {
+        if (p.type === 'frontTop') return 'transparent';
+
         let color = d3.color(p.d.options.color);
         if (typeof stroke === 'function') {
           return stroke(color, p.d);
@@ -445,7 +432,8 @@ class Pie {
           return color.darker(0.75);
         }
       })
-      .attr('d', (p) => p.path.join(' '));
+      .attr('d', (p) => p.path.join(' '))
+      .attr('ss', (p) => p.zIndex);
   }
 
   handleMouseEnter(e, data) {
@@ -508,7 +496,7 @@ class Pie {
         };
       });
 
-      return this.dataSlice(back).concat(this.dataSlice(front));
+      return this.dataSlice(front).concat(this.dataSlice(back));
     }
 
     // 跨左边界
@@ -524,7 +512,7 @@ class Pie {
         };
       });
 
-      return this.dataSlice(back).concat(this.dataSlice(front));
+      return this.dataSlice(front).concat(this.dataSlice(back));
     }
 
     return [d];
@@ -544,6 +532,31 @@ class Pie {
     }
 
     return offsetAngle > Math.PI ? 1 : 0;
+  }
+
+  /**
+   * @description: 计算区块的层级，根据外圈Y轴中值来确定，过上下中线的优先级分别为最小和最大
+   * @param {*} startAngle
+   * @param {*} endAngle
+   * @return {*}
+   */
+  calcZIndex(startAngle, endAngle) {
+    // 过下中线优先级最高
+    if (startAngle < Math.PI / 2 && endAngle > Math.PI / 2) {
+      return Infinity;
+    }
+    // 过上中线优先级最低
+    if (startAngle < (Math.PI * 3) / 2 && endAngle > (Math.PI * 3) / 2) {
+      return -Infinity;
+    }
+
+    let avg = (startAngle + endAngle) / 2;
+
+    if (avg >= 0 && avg <= Math.PI / 2) {
+      avg += 2 * Math.PI;
+    }
+
+    return Math.abs((Math.PI * 3) / 2 - avg) * 10000;
   }
 }
 
