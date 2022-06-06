@@ -17,13 +17,7 @@ function init() {
 
 function randomCfg() {
   const genData = function () {
-    return [
-      { label: 'A类物品', value: ~~(Math.random() * 100) + 20 },
-      { label: 'B类物品', value: ~~(Math.random() * 100) + 20 },
-      { label: 'C类物品', value: ~~(Math.random() * 100) + 20 },
-      { label: 'D类物品', value: ~~(Math.random() * 100) + 20 },
-      { label: 'E类物品', value: ~~(Math.random() * 100) + 20 },
-    ];
+    return Array.from({ length: 5 }, (v, i) => ({ label: `${i + 1}类物品`, value: ~~(Math.random() * 100) + 20 }));
   };
 
   const cfg = {
