@@ -28,6 +28,8 @@ class Pie {
   constructor(el) {
     this.el = el;
 
+    this.size = { w: 0, h: 0 }; // svg尺寸
+
     this.startData = null; // 起始数据
     this.endData = null; // 结束数据
     this.currentData = null; // 当前数据（在起始数据和结束数据之间渐变）
@@ -87,6 +89,12 @@ class Pie {
       const svg = node.append('svg').attr('width', '100%').attr('height', '100%');
       const { width, height } = svg.node().getBoundingClientRect();
 
+      this.size.w = width;
+      this.size.h = height;
+
+      // 设置viewbox（否则foreignObject无法定位）
+      // svg.attr('viewbox', [0, 0, width, height].join(' '));
+
       // 添加一个居中的根分组，并作为后续绘制的根节点
       this.root = svg
         .append('g')
@@ -114,6 +122,7 @@ class Pie {
           // 绘制
           // this.drawPoints();
           this.drawPies();
+          this.drawText();
         };
       });
   }
@@ -124,26 +133,37 @@ class Pie {
    * @return {*}
    */
   genData(data) {
-    const { height: initHeight, colors } = this.options;
+    const { height, colors, data: originData } = this.options;
     const { radius, tilt } = data[0].common;
     const zoom = { x: 1, y: (90 - tilt) / 90 };
     const heightZoom = Math.sin((tilt * Math.PI) / 180);
-    const offsetY = 0 && (initHeight * heightZoom) / 2;
+    const offsetY = 0 && (height * heightZoom) / 2;
     const r = radius.map((v) => ({ x: v * zoom.x, y: v * zoom.y }));
 
     let _data = data;
 
-    const sum = _data.reduce((s, b) => s + b.value, 0);
+    // 数据之和
+    const sum = originData.reduce((s, a) => s + a.value, 0);
 
     _data.forEach((d, i) => {
-      // 角度矫正
+      // 区块角度矫正
       d.startAngle = this.adjustAngle(d.startAngle, config.angleOffset, 0);
       d.endAngle = this.adjustAngle(d.endAngle, config.angleOffset, 1);
+
+      // 计算区块中间弧度
+      let middleAngle =
+        (d.endAngle < d.startAngle ? d.startAngle + Math.PI * 2 + d.endAngle : d.endAngle + d.startAngle) / 2;
+      middleAngle = this.adjustAngle(middleAngle, 0, 0);
+      const middleAngleSin = Math.sin(middleAngle);
+      const middleAngleCos = Math.cos(middleAngle);
+
+      // 计算区块高度
+      const height = d.common.height * heightZoom;
 
       d.options = {
         offsetY, // 底面Y轴偏移量
         // height: height * heightZoom * (1 + d.value / sum), // 高度
-        height: d.common.height * heightZoom, // 高度
+        height, // 高度
         color: colors[i % colors.length], // 颜色
         // 内圈
         inner: {
@@ -169,10 +189,26 @@ class Pie {
             y: r[1].y * Math.sin(d.endAngle) + offsetY,
           },
         },
+        // 文本
+        text: {
+          data: {
+            sum,
+            value: originData[i].value,
+            percent: originData[i].value / sum,
+            realtimeValue: d.value,
+          },
+          x: r[0].x * middleAngleCos + (r[1].x * middleAngleCos - r[0].x * middleAngleCos) * 0.5 - this.size.w / 2,
+          y:
+            r[0].y * middleAngleSin +
+            (r[1].y * middleAngleSin - r[0].y * middleAngleSin) * 0.5 +
+            offsetY -
+            height -
+            this.size.h / 2,
+        },
       };
     });
 
-    // lg(_data);
+    // lg(_data.map((v) => v.options.text));
 
     this.data = _data;
   }
@@ -423,6 +459,7 @@ class Pie {
       pieGroup = this.root.append('g').attr('class', 'pieGroup');
     }
 
+    // 添加图块
     const path = pieGroup.selectAll('path').data(this.genShapes());
 
     // 删除多余并移除所有事件
@@ -458,7 +495,60 @@ class Pie {
         }
       })
       .attr('d', (p) => p.path.join(' '))
-      .attr('ss', (p) => p.zIndex);
+      .attr('zIndex', (p) => p.zIndex);
+  }
+
+  drawText() {
+    const { stroke, fill } = this.options;
+    let textGroup = this.root.select('.textGroup');
+
+    if (textGroup.empty()) {
+      textGroup = this.root.append('g').attr('class', 'textGroup');
+    }
+
+    // 添加文本
+    const text = textGroup.selectAll('foreignObject').data(this.data);
+
+    text.exit().remove();
+
+    // text
+    //   .enter()
+    //   .append('text')
+    //   .merge(text)
+    //   .attr('x', (d) => d.options.text.x)
+    //   .attr('y', (d) => d.options.text.y)
+    //   .text((d) => Math.round(d.value))
+    //   .style('text-anchor', 'middle')
+    //   .style('dominant-baseline', 'middle')
+    //   .style('pointer-events', 'none');
+
+    text
+      .enter()
+      .append('foreignObject')
+      .attr('width', this.size.w)
+      .attr('height', this.size.h)
+      .style('pointer-events', 'none')
+      .append('xhtml:div');
+
+    const texts = textGroup
+      .selectAll('foreignObject')
+      .attr('x', (d) => d.options.text.x)
+      .attr('y', (d) => d.options.text.y)
+      .select('div')
+      .style('position', 'absolute')
+      .style('top', '50%')
+      .style('left', '50%')
+      .style('transform', 'translate(-50%, -50%)');
+
+    if (typeof this.options.textNode === 'function') {
+      texts.html('').append((d) => {
+        return this.options.textNode({ ...d.options.text.data });
+      });
+    } else {
+      texts.text((d) => {
+        return Math.round(d.options.text.data.realtimeValue);
+      });
+    }
   }
 
   handleMouseEnter(e, data) {

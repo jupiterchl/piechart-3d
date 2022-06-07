@@ -17,7 +17,7 @@ function init() {
 
 function randomCfg() {
   const genData = function () {
-    return Array.from({ length: 3 }, (v, i) => ({ label: `${i + 1}类物品`, value: ~~(Math.random() * 100) + 20 }));
+    return Array.from({ length: 6 }, (v, i) => ({ label: `${i + 1}类物品`, value: ~~(Math.random() * 100) + 20 }));
   };
 
   const cfg = {
@@ -26,6 +26,11 @@ function randomCfg() {
     height: ~~(Math.random() * 50) + 50, // 高度
     colors: ['#0896FF', '#0FC7FF', '#4EF7E7', '#2FEEC8', '#FFB632', '#FF8C3F', '#3FEC9B', '#ECC763'], // 颜色
     data: genData(), // 数据
+    textNode(d) {
+      const p = document.createElement('p');
+      p.innerText = Math.round(d.realtimeValue);
+      return p;
+    },
   };
 
   return cfg;
