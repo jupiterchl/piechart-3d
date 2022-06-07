@@ -21,6 +21,7 @@ const defultOptions = {
 const config = {
   pieTransition: () => d3.transition().duration(500), // 饼图渐变
   activeTransition: () => d3.transition().duration(250), // 激活块渐变
+  angleOffset: -Math.PI / 2, // 弧度偏移（用于调整起始绘制角度）
 };
 
 class Pie {
@@ -55,8 +56,8 @@ class Pie {
 
     this.endData = this.dataToPie(this.options.data);
 
-    // lg('startData: ', this.startData.map((v) => v.custom.height).join());
-    // lg('endData: ', this.endData.map((v) => v.custom.height).join());
+    // lg('startData: ', this.startData.map((v) => v.common.height).join());
+    // lg('endData: ', this.endData.map((v) => v.common.height).join());
   }
 
   dataToPie(data) {
@@ -68,7 +69,7 @@ class Pie {
 
     // 添加自定义属性，参与渐变
     pieData.forEach((d) => {
-      d.custom = { radius, height: d.data.active ? height + 40 : height, tilt };
+      d.common = { radius, height: d.data.active ? height + 40 : height, tilt };
     });
 
     return pieData;
@@ -105,10 +106,10 @@ class Pie {
         return (t) => {
           // 更新当前数据
           this.currentData = i(t);
-          // lg(`currentData ${time}: `, this.currentData.map((v) => v.custom.height).join());
+          // lg(`currentData ${time}: `, this.currentData.map((v) => v.common.height).join());
 
           // 基于当前数据创建绘制所需数据
-          this.genData(this.currentData);
+          this.genData(cloneDeep(this.currentData));
 
           // 绘制
           // this.drawPoints();
@@ -117,9 +118,14 @@ class Pie {
       });
   }
 
+  /**
+   * @description: 生成绘制数据
+   * @param {*} data
+   * @return {*}
+   */
   genData(data) {
     const { height: initHeight, colors } = this.options;
-    const { radius, tilt } = data[0].custom;
+    const { radius, tilt } = data[0].common;
     const zoom = { x: 1, y: (90 - tilt) / 90 };
     const heightZoom = Math.sin((tilt * Math.PI) / 180);
     const offsetY = 0 && (initHeight * heightZoom) / 2;
@@ -130,10 +136,14 @@ class Pie {
     const sum = _data.reduce((s, b) => s + b.value, 0);
 
     _data.forEach((d, i) => {
+      // 角度矫正
+      d.startAngle = this.adjustAngle(d.startAngle, config.angleOffset, 0);
+      d.endAngle = this.adjustAngle(d.endAngle, config.angleOffset, 1);
+
       d.options = {
         offsetY, // 底面Y轴偏移量
         // height: height * heightZoom * (1 + d.value / sum), // 高度
-        height: d.custom.height * heightZoom, // 高度
+        height: d.common.height * heightZoom, // 高度
         color: colors[i % colors.length], // 颜色
         // 内圈
         inner: {
@@ -300,7 +310,8 @@ class Pie {
             'z',
           ];
 
-          s.push({ type: 'innerSide', d, path: innerSide, zIndex });
+          // 内圈层级低，可以被侧面和顶面覆盖
+          s.push({ type: 'innerSide', d, path: innerSide, zIndex: zIndex - 1 });
 
           // 后顶面绘制完整，以解决接缝处可能出现的白线问题
           const backTop = [
@@ -435,8 +446,6 @@ class Pie {
         }
         return color;
       })
-      // .attr('stroke', 'transparent')
-      // .attr('stroke-width', 0)
       .attr('fill', (p) => {
         let color = d3.color(p.d.options.color);
         if (typeof fill === 'function') {
@@ -513,7 +522,7 @@ class Pie {
         };
       });
 
-      return this.dataSlice(front).concat(this.dataSlice(back));
+      return this.dataSlice(back).concat(this.dataSlice(front));
     }
 
     // 跨左边界
@@ -560,11 +569,11 @@ class Pie {
   calcZIndex(startAngle, endAngle) {
     // 过下中线优先级最高
     if (startAngle < Math.PI / 2 && endAngle > Math.PI / 2) {
-      return Infinity;
+      return 99999;
     }
     // 过上中线优先级最低
     if (startAngle < (Math.PI * 3) / 2 && endAngle > (Math.PI * 3) / 2) {
-      return -Infinity;
+      return -99999;
     }
 
     let avg = (startAngle + endAngle) / 2;
@@ -574,6 +583,32 @@ class Pie {
     }
 
     return Math.abs((Math.PI * 3) / 2 - avg) * 10000;
+  }
+
+  /**
+   * @description: 弧度矫正
+   * @param {*} angle
+   * @param {*} offset
+   * @param {*} type 0->起点, 1->终点
+   * @return {*}
+   */
+  adjustAngle(angle, offset, type) {
+    let _angle = angle + (offset % (Math.PI * 2));
+
+    if (_angle < 0) {
+      _angle += Math.PI * 2;
+    } else if (_angle > Math.PI * 2) {
+      _angle -= Math.PI * 2;
+    }
+
+    // 端点矫正
+    if (type === 0 && _angle === Math.PI * 2) {
+      _angle = 0;
+    } else if (type === 1 && _angle === 0) {
+      _angle = Math.PI * 2;
+    }
+
+    return _angle;
   }
 }
 
