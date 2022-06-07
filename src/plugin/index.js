@@ -1,6 +1,7 @@
 /* eslint-disable no-invalid-this */
 import * as d3 from 'd3';
 import cloneDeep from 'lodash.clonedeep';
+import debounce from 'lodash.debounce';
 
 function lg(...args) {
   args.forEach((arg) => {
@@ -25,6 +26,14 @@ const config = {
 class Pie {
   constructor(el) {
     this.el = el;
+
+    this.startData = null; // 起始数据
+    this.endData = null; // 结束数据
+    this.currentData = null; // 当前数据（在起始数据和结束数据之间渐变）
+
+    this.data = null; // 绘制实际使用的数据（基于当前数据计算后的数据）
+
+    this.setOptionDebounce = debounce(this.setOption, 200, { leading: true }); // setOption防抖
   }
 
   setOption(options) {
@@ -35,22 +44,19 @@ class Pie {
   }
 
   initData() {
-    if (this.root) {
-      // 中断渐变
-      this.root.interrupt();
-    }
-
-    if (this.nowData) {
-      this.oldData = this.nowData;
+    if (this.currentData) {
+      // 起始数据等于当前数据，而不是结束数据（因为渐变可能会中断）
+      this.startData = this.currentData;
     } else {
-      // 创建空数据，以便初始渐变
+      // 创建空数据
       const emptyData = this.options.data.map((v) => ({ ...v, value: 0 }));
-      this.oldData = this.dataToPie(emptyData);
+      this.startData = this.dataToPie(emptyData);
     }
 
-    this.nowData = this.dataToPie(this.options.data);
+    this.endData = this.dataToPie(this.options.data);
 
-    // lg('data', this.oldData.map((v) => v.custom.height).join(), this.nowData.map((v) => v.custom.height).join());
+    // lg('startData: ', this.startData.map((v) => v.custom.height).join());
+    // lg('endData: ', this.endData.map((v) => v.custom.height).join());
   }
 
   dataToPie(data) {
@@ -87,18 +93,28 @@ class Pie {
         .attr('transform', `translate(${width / 2}, ${height / 2})`);
     }
 
-    // const time = Date.now();
+    const time = Date.now();
 
-    this.root.transition(config.pieTransition()).tween('tw', () => {
-      const i = d3.interpolate(this.oldData, this.nowData);
-      return (t) => {
-        this.nowData = i(t);
-        // lg(time, this.nowData.map((v) => v.custom.height).join());
-        this.genData(this.nowData);
-        // this.drawPoints();
-        this.drawPies();
-      };
-    });
+    this.root
+      .interrupt()
+      .transition(config.pieTransition())
+      .tween('tw', () => {
+        // 在开始数据和结束数据之间创建插值
+        const i = d3.interpolate(this.startData, this.endData);
+
+        return (t) => {
+          // 更新当前数据
+          this.currentData = i(t);
+          // lg(`currentData ${time}: `, this.currentData.map((v) => v.custom.height).join());
+
+          // 基于当前数据创建绘制所需数据
+          this.genData(this.currentData);
+
+          // 绘制
+          // this.drawPoints();
+          this.drawPies();
+        };
+      });
   }
 
   genData(data) {
@@ -450,10 +466,11 @@ class Pie {
       v.active = i === idx;
     });
 
-    this.setOption(options);
+    this.setOptionDebounce(options);
   }
 
   handleMouseLeave(e, data) {
+    // 当在同一区块不同切片上切换时，添加防抖
     this.leaveTimeout = setTimeout(() => {
       const idx = Math.round(data.d.index);
       if (!this._options.data[idx].active) return;
@@ -466,8 +483,8 @@ class Pie {
         v.active = false;
       });
 
-      this.setOption(options);
-    }, 50);
+      this.setOptionDebounce(options);
+    });
   }
 
   /**

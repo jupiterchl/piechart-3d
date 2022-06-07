@@ -24,7 +24,7 @@ function randomCfg() {
     radius: [~~(Math.random() * 100), ~~(Math.random() * 80) + 120], // 半径：[内径, 外径]
     tilt: ~~(Math.random() * 30) + 30, // 倾角
     height: ~~(Math.random() * 50) + 50, // 高度
-    colors: ['#1A6AA3', '#A5789E', '#FF6D54', '#FFC154', '#47B39C'], // 颜色
+    colors: ['#0896FF', '#0FC7FF', '#4EF7E7', '#2FEEC8', '#FFB632', '#FF8C3F', '#3FEC9B', '#ECC763'], // 颜色
     data: genData(), // 数据
   };
 
