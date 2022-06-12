@@ -10,7 +10,7 @@ const webpackProdConfig = {
   mode: 'production',
   target: ['web', 'es5'],
   entry: {
-    demo: './src/plugin/index.js',
+    pieChart3d: './src/plugin/index.js',
   },
   output: {
     path: path.resolve(__dirname, '../es'),

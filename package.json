@@ -1,5 +1,5 @@
 {
-  "name": "3dpie-chart",
+  "name": "piechart-3d",
   "version": "1.0.0",
   "description": "3d饼状图图表",
   "keywords": [
@@ -9,7 +9,7 @@
   "author": "jupiterchl",
   "license": "MIT",
   "private": false,
-  "main": "es/demo.js",
+  "main": "es/pieChart3d.js",
   "files": [
     "es/",
     "README.md",
@@ -57,10 +57,10 @@
   },
   "repository": {
     "type": "https",
-    "url": "https://gitee.com/happychl/template-plugin.git"
+    "url": "https://gitee.com/happychl/pie-chart-3d.git"
   },
   "bugs": {
-    "url": "https://gitee.com/happychl/template-plugin/issues"
+    "url": "https://gitee.com/happychl/pie-chart-3d/issues"
   },
   "dependencies": {
     "d3": "^7.4.4",
