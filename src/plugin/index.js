@@ -2,14 +2,14 @@
 import * as d3 from 'd3';
 import cloneDeep from 'lodash.clonedeep';
 import debounce from 'lodash.debounce';
-import { lg, numFixed, checkArcFlag, calcZIndex, adjustAngle } from './libs/utils';
+import { lg, numFixed, checkArcFlag, calcZIndex, adjustAngle, compare } from './libs/utils';
 
 const defultOptions = {
   stroke: null, // 绘制线条样式
   fill: null, // 绘制填充样式
   activeStyle: 1, // 激活样式（1->升高; 2->平移）
   activeOffset: 40, // 激活偏移量
-  angleOffset: -Math.PI / 2, // 弧度偏移（用于调整起始绘制角度）
+  angleOffset: 0, // 弧度偏移（用于调整起始绘制角度）
   textPosRatio: 0.5, // 文本位置比例
   textPrecision: 0, // 文本数值精度
 };
@@ -17,7 +17,6 @@ const defultOptions = {
 const config = {
   pieTransition: () => d3.transition().duration(500), // 饼图渐变
   activeTransition: () => d3.transition().duration(250), // 激活块渐变
-  angleOffset: -Math.PI / 2, // 弧度偏移（用于调整起始绘制角度）
 };
 
 class Pie {
@@ -32,16 +31,33 @@ class Pie {
 
     this.drawData = null; // 绘制实际使用的数据（基于当前数据计算后的数据）
 
-    this.setOptionDebounce = debounce(this.setOption, 200, { leading: true }); // setOption防抖
+    this.updateOptionsDebounce = debounce(this.updateOptions, 200, { leading: true }); // 防抖
   }
 
+  /**
+   * @description: 设置参数
+   * @param {*} options
+   * @return {*}
+   */
   setOption(options) {
-    this._options = options;
-    this.options = { ...defultOptions, ...options };
+    this._options = cloneDeep(options); // 缓存原始options
+    this.updateOptionsDebounce();
+  }
+
+  /**
+   * @description: 配置更新
+   * @return {*}
+   */
+  updateOptions() {
+    this.options = { ...defultOptions, ...this._options };
     this.initData();
     this.draw();
   }
 
+  /**
+   * @description: 数据初始化
+   * @return {*}
+   */
   initData() {
     if (this.currentData && this.currentData.length === this.options.data.length) {
       // 如果当前数据存在且数据项没变，则起始数据等于当前数据
@@ -123,8 +139,6 @@ class Pie {
         .attr('transform', `translate(${width / 2}, ${height / 2})`);
     }
 
-    const time = Date.now();
-
     this.root
       .interrupt() // 中断未结束的渐变
       .transition(config.pieTransition()) // 开始新的渐变
@@ -135,15 +149,15 @@ class Pie {
         return (t) => {
           // 更新当前数据
           this.currentData = i(t);
-          // lg(`currentData ${time}: `, this.currentData.map((v) => v.common.height).join());
 
           // 基于当前数据创建绘制所需数据
-          this.genDrawData(cloneDeep(this.currentData));
+          this.genDrawData(this.currentData);
 
-          // 绘制
-          // this.drawPoints();
+          // 绘制饼图
           this.drawPies();
-          // this.drawText();
+
+          // 绘制图例（图例不参与渐变）
+          this.drawLegends();
         };
       });
   }
@@ -167,17 +181,19 @@ class Pie {
     this.drawData = data.map((d, i) => {
       let _d = {
         index: i,
-        startAngle: adjustAngle(d.startAngle, angleOffset, 0), // 矫正的起始角度
-        endAngle: adjustAngle(d.endAngle, angleOffset, 1), // 矫正的结束角度
+        hidden: originData[i].hidden,
+        startAngle: adjustAngle(d.startAngle, angleOffset, -1), // 矫正的起始角度
+        endAngle: adjustAngle(d.endAngle, angleOffset, -1), // 矫正的结束角度
         offsetY: offsetY * heightZoom, // 底面Y轴偏移量（对称绘制时为高度一半）
         color: colors[i % colors.length], // 区块颜色
         height: d.height * heightZoom, // 区块高度
+        origin: originData[i], // 原始数据
       };
 
       // 计算区块中线位置
       _d.middleAngle = 0;
 
-      if (_d.endAngle < _d.startAngle) {
+      if (compare(-1, _d.endAngle, _d.startAngle)) {
         // 跨右边界
         _d.middleAngle = adjustAngle((_d.startAngle + _d.endAngle) / 2 + Math.PI, 0, 0);
       } else {
@@ -211,6 +227,10 @@ class Pie {
           x: r[0].x * Math.cos(_d.startAngle),
           y: r[0].y * Math.sin(_d.startAngle) + _d.offsetY,
         },
+        middlePoint: {
+          x: r[0].x * Math.cos(_d.middleAngle),
+          y: r[0].y * Math.sin(_d.middleAngle) + _d.offsetY,
+        },
         endPoint: {
           x: r[0].x * Math.cos(_d.endAngle),
           y: r[0].y * Math.sin(_d.endAngle) + _d.offsetY,
@@ -224,6 +244,10 @@ class Pie {
           x: r[1].x * Math.cos(_d.startAngle),
           y: r[1].y * Math.sin(_d.startAngle) + _d.offsetY,
         },
+        middlePoint: {
+          x: r[1].x * Math.cos(_d.middleAngle),
+          y: r[1].y * Math.sin(_d.middleAngle) + _d.offsetY,
+        },
         endPoint: {
           x: r[1].x * Math.cos(_d.endAngle),
           y: r[1].y * Math.sin(_d.endAngle) + _d.offsetY,
@@ -231,38 +255,6 @@ class Pie {
       };
 
       return _d;
-    });
-
-    // lg(this.drawData);
-  }
-
-  drawPoints() {
-    const pointGroup = this.root.select('.pointGroup');
-
-    if (pointGroup.empty()) {
-      this.root.append('g').attr('class', 'pointGroup');
-    } else {
-      pointGroup.html('');
-    }
-
-    // 绘制中心点
-    pointGroup.append('circle').attr('fill', 'red').attr('r', 6).attr('cx', 0).attr('cy', 0);
-    // 绘制辅助点
-    const g = pointGroup.append('g').selectAll('circle').data(this.data).enter();
-
-    [
-      { type: 'inner', color: 'green' },
-      { type: 'outer', color: 'blue' },
-    ].forEach((v) => {
-      ['startPoint', 'endPoint'].forEach((p) => {
-        for (let i = 0; i < 2; i++) {
-          g.append('circle')
-            .attr('fill', v.color)
-            .attr('r', 4)
-            .attr('cx', ({ options }) => options[v.type][p].x)
-            .attr('cy', ({ options }) => options[v.type][p].y - options.height * i);
-        }
-      });
     });
   }
 
@@ -272,16 +264,18 @@ class Pie {
    */
   genShapes() {
     const shapes = this.drawData.reduce((s, d) => {
+      if (d.hidden) return s;
+
       const slices = this.dataSlice(d);
 
-      slices.forEach((_d, i) => {
+      const groups = slices.map((_d, i) => {
         const { startAngle, endAngle, height, inner, outer } = _d;
         const zIndex = calcZIndex(startAngle, endAngle); // 区块层级
 
         let group = { zIndex, data: [] }; // 创建区块分组
 
         // 起点位于左半边且为第一切片，则需要绘制起始侧面
-        if (startAngle > Math.PI / 2 && startAngle < (3 * Math.PI) / 2 && i === 0) {
+        if (compare(1, startAngle, Math.PI / 2) && compare(-1, startAngle, (3 * Math.PI) / 2) && i === 0) {
           const path = [
             'M',
             inner.startPoint.x,
@@ -301,7 +295,10 @@ class Pie {
         }
 
         // 终点位于右半边且为最后切片，则需要绘制结尾侧面
-        if ((endAngle < Math.PI / 2 || endAngle > (3 * Math.PI) / 2) && i === slices.length - 1) {
+        if (
+          (compare(-1, endAngle, Math.PI / 2) || compare(1, endAngle, (3 * Math.PI) / 2)) &&
+          i === slices.length - 1
+        ) {
           const path = [
             'M',
             inner.endPoint.x,
@@ -359,7 +356,15 @@ class Pie {
             d.inner.radius.x,
             d.inner.radius.y,
             0,
-            checkArcFlag(d.startAngle, d.endAngle),
+            checkArcFlag(d.startAngle, d.middleAngle),
+            1,
+            d.inner.middlePoint.x,
+            d.inner.middlePoint.y - d.height,
+            'A',
+            d.inner.radius.x,
+            d.inner.radius.y,
+            0,
+            checkArcFlag(d.middleAngle, d.endAngle),
             1,
             d.inner.endPoint.x,
             d.inner.endPoint.y - d.height,
@@ -370,7 +375,15 @@ class Pie {
             d.outer.radius.x,
             d.outer.radius.y,
             0,
-            checkArcFlag(d.startAngle, d.endAngle),
+            checkArcFlag(d.middleAngle, d.endAngle),
+            0,
+            d.outer.middlePoint.x,
+            d.outer.middlePoint.y - d.height,
+            'A',
+            d.outer.radius.x,
+            d.outer.radius.y,
+            0,
+            checkArcFlag(d.startAngle, d.middleAngle),
             0,
             d.outer.startPoint.x,
             d.outer.startPoint.y - d.height,
@@ -448,22 +461,19 @@ class Pie {
           });
         }
 
-        // 文本
-        if (d.middleAngle >= startAngle && d.middleAngle <= endAngle) {
-          group.data.push({ type: 'text', name: 'text', d: _d, data: d.text });
-        }
-
-        s.push(group);
+        return group;
       });
 
-      return s;
+      // 文本（文本插入到层级最高的组）
+      groups.sort((a, b) => (a.zIndex < b.zIndex ? 1 : -1));
+      groups[0].data.push({ type: 'text', name: 'text', d: d, data: d.text });
+
+      return s.concat(groups);
     }, []);
 
     // 按优先级zIndex排序
     const _shapes = shapes.sort((a, b) => (a.zIndex > b.zIndex ? 1 : -1));
-
-    // lg(_shapes.map((v) => v.zIndex));
-
+    // lg('shapes', _shapes);
     return _shapes;
   }
 
@@ -551,6 +561,118 @@ class Pie {
   }
 
   /**
+   * @description: 绘制图例
+   * @return {*}
+   */
+  drawLegends() {
+    let legend = this.root.select('.legend');
+
+    if (legend.empty()) {
+      // 创建图例根元素
+      legend = this.root.append('foreignObject').attr('class', 'legend').style('transform', 'translate(-50%, 0)');
+      // 创建图例列表
+      legend
+        .append('xhtml:div')
+        .attr('class', 'legend-list')
+        .style('position', 'absolute')
+        .style('top', '0')
+        .style('left', '50%')
+        .style('transform', 'translate(-50%, 0)')
+        .style('display', 'flex')
+        .style('flex-wrap', 'wrap')
+        .style('align-content', 'flex-start')
+        .style('justify-content', 'center')
+        .style('width', '100%')
+        .style('height', '100%')
+        .style('padding', '10px')
+        .style('box-sizing', 'border-box');
+    }
+
+    const drawData = this.drawData;
+    let legendItem = legend.select('.legend-list').selectAll('.legend-item').data(drawData);
+
+    legendItem.exit().remove().on('.', null);
+
+    if (drawData.length > 0) {
+      const { offsetY, outer } = drawData[0];
+      const y = offsetY + outer.radius.y;
+
+      // 更新图例根节点尺寸、位置
+      legend
+        .attr('width', this.size.w)
+        .attr('height', this.size.h / 2 - y)
+        .attr('x', 0)
+        .attr('y', y);
+
+      // 更新图例项
+      legendItem = legendItem
+        .enter()
+        .append('div')
+        .attr('class', 'legend-item')
+        .style('display', 'flex')
+        .style('align-items', 'center')
+        .style('margin', '4px 10px')
+        .style('cursor', 'pointer')
+        .on('mouseenter', this.handleLegendMouseEnter.bind(this))
+        .on('mouseleave', this.handleLegendMouseLeave.bind(this))
+        .on('click', this.handleLegendClick.bind(this))
+        .merge(legendItem)
+        .classed('inactive', (d) => d.hidden)
+        .style('opacity', (d) => (d.hidden ? 0.5 : 1))
+        .html('');
+
+      legendItem
+        .append('span')
+        .attr('class', 'legend-tag')
+        .style('display', 'inline-block')
+        .style('width', '10px')
+        .style('height', '10px')
+        .style('margin-right', '4px')
+        .style('background-color', (d) => d.color);
+      legendItem
+        .append('span')
+        .attr('class', 'legend-label')
+        .text((d) => d.origin.label);
+    }
+  }
+
+  /**
+   * @description: 处理图例点击
+   * @param {*} e
+   * @param {*} data
+   * @return {*}
+   */
+  handleLegendClick(e, data) {
+    const { index } = data;
+    const item = this._options.data[index];
+
+    if (item.hidden) {
+      item.value = item._value;
+      item.hidden = false;
+    } else {
+      item._value = item.value;
+      item.value = 0;
+      item.hidden = true;
+    }
+
+    this.updateOptionsDebounce();
+  }
+
+  /**
+   * @description: 处理图例悬浮
+   * @param {*} e
+   * @param {*} data
+   * @return {*}
+   */
+  handleLegendMouseEnter(e, data) {
+    this.activePie(data.index);
+  }
+
+  handleLegendMouseLeave(e, data) {
+    this.inactivePie(data.index);
+  }
+
+  /**
    * @description: 处理鼠标悬浮
    * @param {*} e
    * @param {*} data
@@ -559,36 +681,44 @@ class Pie {
   handleMouseEnter(e, data) {
     this.leaveTimeout && clearTimeout(this.leaveTimeout);
 
-    const idx = Math.round(data.d.index); // 渐变后可能会出现浮点
-    if (this._options.data[idx].active) return;
-
-    console.log('enter', idx, data);
-
-    let options = { ...this._options };
-
-    options.data.forEach((v, i) => {
-      v.active = i === idx;
-    });
-
-    this.setOptionDebounce(options);
+    this.activePie(data.d.index);
   }
 
   handleMouseLeave(e, data) {
     // 当在同一区块不同切片上切换时，添加防抖
     this.leaveTimeout = setTimeout(() => {
-      const idx = Math.round(data.d.index);
-      if (!this._options.data[idx].active) return;
-
-      console.log('leave', idx, data);
-
-      let options = { ...this._options };
-
-      options.data.forEach((v, i) => {
-        v.active = false;
-      });
-
-      this.setOptionDebounce(options);
+      this.inactivePie(data.d.index);
     });
+  }
+
+  /**
+   * @description: 激活饼图
+   * @param {*} idx
+   * @return {*}
+   */
+  activePie(idx) {
+    if (this._options.data[idx].active) return;
+
+    this._options.data.forEach((v, i) => {
+      v.active = i === idx;
+    });
+
+    this.updateOptionsDebounce();
+  }
+
+  /**
+   * @description: 取消激活饼图
+   * @param {*} idx
+   * @return {*}
+   */
+  inactivePie(idx) {
+    if (!this._options.data[idx].active) return;
+
+    this._options.data.forEach((v) => {
+      v.active = false;
+    });
+
+    this.updateOptionsDebounce();
   }
 
   /**
@@ -600,7 +730,7 @@ class Pie {
     const { startAngle, endAngle, offsetY } = d;
 
     // 跨右边界
-    if (startAngle > endAngle) {
+    if (compare(1, startAngle, endAngle)) {
       let back = cloneDeep(d);
       let front = cloneDeep(d);
 
@@ -617,7 +747,7 @@ class Pie {
     }
 
     // 跨左边界
-    if (startAngle < Math.PI && endAngle > Math.PI) {
+    if (compare(-1, startAngle, Math.PI) && compare(1, endAngle, Math.PI)) {
       let front = cloneDeep(d);
       let back = cloneDeep(d);
 

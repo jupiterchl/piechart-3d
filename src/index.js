@@ -17,7 +17,7 @@ function init() {
 
 function randomCfg() {
   const genData = function () {
-    return Array.from({ length: Math.floor(Math.random() * 5) + 5 }, (v, i) => ({
+    return Array.from({ length: 10 }, (v, i) => ({
       label: `${i + 1}类物品`,
       value: ~~(Math.random() * 100) + 20,
     }));

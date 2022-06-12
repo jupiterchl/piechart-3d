@@ -76,16 +76,42 @@ export function adjustAngle(angle, offset, type) {
 
   if (_angle < 0) {
     _angle += Math.PI * 2;
-  } else if (_angle > Math.PI * 2) {
+  } else if (compare(1, _angle, Math.PI * 2)) {
     _angle -= Math.PI * 2;
   }
 
   // 端点矫正
-  if (type === 0 && _angle === Math.PI * 2) {
+  if (type === 0 && compare(0, _angle, Math.PI * 2)) {
     _angle = 0;
-  } else if (type === 1 && _angle === 0) {
+  } else if (type === 1 && compare(0, _angle, 0)) {
     _angle = Math.PI * 2;
   }
 
   return _angle;
+}
+
+/**
+ * @description: 高精度比较
+ * @param {*} t
+ * @param {*} m
+ * @param {*} n
+ * @return {*}
+ */
+export function compare(t, m, n) {
+  const precision = 5;
+  const _m = numFixed(m, precision);
+  const _n = numFixed(n, precision);
+
+  switch (t) {
+    case 0:
+      return _m === _n;
+    case 1:
+      return _m > _n;
+    case 2:
+      return _m >= _n;
+    case -1:
+      return _m < _n;
+    case -2:
+      return _m <= _n;
+  }
 }
