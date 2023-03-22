@@ -1,10 +1,11 @@
 {
   "name": "piechart-3d",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "3d饼状图图表",
   "keywords": [
-    "template",
-    "template-plugin"
+    "pie",
+    "3d",
+    "piechart"
   ],
   "author": "jupiterchl",
   "license": "MIT",
@@ -19,6 +20,14 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development webpack-dev-server --progress --config config/webpack.dev.config.js",
     "build": "cross-env NODE_ENV=production webpack --progress --config config/webpack.prod.config.js"
+  },
+  "dependencies": {
+    "d3-shape": "^3.2.0",
+    "gsap": "^3.11.5",
+    "lodash.clonedeep": "^4.5.0",
+    "lodash.debounce": "^4.0.8",
+    "lodash.merge": "^4.6.2",
+    "three": "^0.150.1"
   },
   "devDependencies": {
     "@babel/core": "^7.16.0",
@@ -61,10 +70,5 @@
   },
   "bugs": {
     "url": "https://gitee.com/happychl/pie-chart-3d/issues"
-  },
-  "dependencies": {
-    "d3": "^7.4.4",
-    "lodash.clonedeep": "^4.5.0",
-    "lodash.debounce": "^4.0.8"
   }
 }

@@ -1,18 +1,31 @@
 import './index.scss';
-import pie from './plugin';
+import Pie from './plugin';
 
 function init() {
-  const myPie = pie.init(document.querySelector('.chart'));
-  myPie.setOption(randomCfg());
-  // console.log(myPie);
-
-  document.getElementById('click').addEventListener(
-    'click',
-    () => {
-      myPie.setOption(randomCfg());
+  const options = {
+    data: [1.5, 0.78, 0.62, 0.48],
+    innerRadius: 0,
+    outerRadius: 150,
+    cornerRadius: 0,
+    padAngle: 0,
+    height: 40,
+    animation: {
+      delay: 2,
+      duration: 0.75,
+      activeHeight: 1.5,
     },
-    false
-  );
+  };
+  const myPie = new Pie('.chart1', options);
+
+  const myPie1 = new Pie('.chart2', options);
+
+  // document.getElementById('click').addEventListener(
+  //   'click',
+  //   () => {
+  //     myPie.setOption(randomCfg());
+  //   },
+  //   false
+  // );
 }
 
 function randomCfg() {
