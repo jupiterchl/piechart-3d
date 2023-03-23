@@ -1,25 +1,19 @@
 /* eslint-disable no-invalid-this */
-import merge from 'lodash.merge';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import gsap from 'gsap';
+import merge from 'lodash.merge';
+import castArray from 'lodash.castarray';
+import upperFirst from 'lodash.upperfirst';
 import makePie from './libs/makePie';
-import { lg, numFixed, checkArcFlag, calcZIndex, adjustAngle, compare } from './libs/utils';
+import ResourceTracker from './libs/ResourceTracker';
 
-const defultOptions = {
-  stroke: null, // 绘制线条样式
-  fill: null, // 绘制填充样式
-  activeStyle: 1, // 激活样式（1->升高; 2->平移）
-  activeOffset: 40, // 激活偏移量
-  angleOffset: 0, // 弧度偏移（用于调整起始绘制角度）
-  textPosRatio: 0.5, // 文本位置比例
-  textPrecision: 0, // 文本数值精度
-  // ...
+const defaultOptions = {
   data: [],
   parseValue: (v) => v,
   innerRadius: 0,
-  outerRadius: 1,
+  outerRadius: 100,
   cornerRadius: 0,
   padAngle: 0,
   height: 40,
@@ -43,12 +37,27 @@ const defultOptions = {
     '#f59e0b', // amber
     '#ef4444', // red
   ],
+  light: {
+    ambientLight: {
+      color: '#fff',
+      intensity: 0.3,
+    },
+    spotLight: {
+      color: '#fff',
+      intensity: 1,
+      position: [5, 5, 5],
+    },
+  },
+  activeCallback: null,
 };
 
 class Pie {
   constructor(el, options) {
     this.$el = typeof el === 'string' ? document.querySelector(el) : el;
-    this.options = merge(defultOptions, options);
+    this.options = merge({}, defaultOptions, options);
+
+    this.resMgr = new ResourceTracker();
+    this.track = this.resMgr.track.bind(this.resMgr);
 
     this.init();
   }
@@ -87,7 +96,7 @@ class Pie {
    * @return {*}
    */
   initFrame() {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(this.width, this.height);
     this.renderer.shadowMap.enabled = true;
@@ -115,13 +124,30 @@ class Pie {
    * @return {*}
    */
   buildAuxSystem() {
+    if (!this.options.debug) return;
+
     // 坐标轴
     const axisHelper = new THREE.AxesHelper(10);
     this.scene.add(axisHelper);
+    this.track(axisHelper);
 
     // 网格
     const gridHelper = new THREE.GridHelper(100, 50);
     this.scene.add(gridHelper);
+    this.track(gridHelper);
+
+    // 地板
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(100, 100),
+      new THREE.MeshPhongMaterial({
+        color: 0x3980b5,
+        wireframe: false,
+      })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    this.scene.add(floor);
+    this.track(floor);
 
     // 控制器
     let controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -135,53 +161,28 @@ class Pie {
    * @return {*}
    */
   buildLightSystem() {
-    // 地板
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(100, 100),
-      new THREE.MeshPhongMaterial({
-        color: 0x3980b5,
-        wireframe: false,
-      })
-    );
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    this.scene.add(floor);
+    const { debug, light } = this.options;
 
-    const sphere = new THREE.SphereGeometry(0.2);
+    Object.entries(light).forEach(([type, option]) => {
+      const _type = upperFirst(type);
+      if (!option || !THREE[_type]) return;
 
-    // 环境光
-    let light = new THREE.AmbientLight(0xffffff, 0.3);
+      castArray(option).forEach(({ color, intensity, position }) => {
+        let _light = new THREE[_type](color, intensity);
 
-    // 点光
-    let pointLight = new THREE.PointLight(0xffffff, 0.75);
-    pointLight.add(new THREE.Mesh(sphere.clone(), new THREE.MeshBasicMaterial({ color: 0xffffff })));
-    pointLight.position.set(0, 10, 0);
-    pointLight.castShadow = true;
-    pointLight.shadow.camera.near = 0.1;
-    pointLight.shadow.camera.far = 25;
+        if (position) {
+          _light.position.set(...position);
+        }
 
-    // 平行光
-    let directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-    directionalLight.add(new THREE.Mesh(sphere.clone(), new THREE.MeshBasicMaterial({ color: 0xffffff })));
-    directionalLight.position.set(8, 8, -8);
-    directionalLight.castShadow = true;
+        if (debug) {
+          const _sphere = new THREE.SphereGeometry(0.2);
+          _light.add(new THREE.Mesh(_sphere, new THREE.MeshBasicMaterial({ color })));
+        }
 
-    // 聚光灯
-    const spotLight = new THREE.SpotLight(0xffffff, 0.75);
-    spotLight.add(new THREE.Mesh(sphere.clone(), new THREE.MeshBasicMaterial({ color: 0xffffff })));
-    spotLight.position.set(10, 15, 10);
-    // spotLight.map = new THREE.TextureLoader().load(url);
-    spotLight.castShadow = true;
-    spotLight.shadow.mapSize.width = 50;
-    spotLight.shadow.mapSize.height = 50;
-    spotLight.shadow.camera.near = 0.1;
-    spotLight.shadow.camera.far = 20;
-    spotLight.shadow.camera.fov = 30;
-
-    this.scene.add(light);
-    // this.scene.add(pointLight);
-    // this.scene.add(directionalLight);
-    this.scene.add(spotLight);
+        this.scene.add(_light);
+        this.track(_light);
+      });
+    });
   }
 
   /**
@@ -189,8 +190,7 @@ class Pie {
    * @return {*}
    */
   buildPie() {
-    const { data, parseValue, innerRadius, outerRadius, cornerRadius, padAngle, height, animation, colors } =
-      this.options;
+    const { data, parseValue, innerRadius, outerRadius, cornerRadius, padAngle } = this.options;
     const { pieSvgDataUri, arcs, arcGenerator } = makePie(data, {
       parseValue,
       innerRadius,
@@ -200,61 +200,12 @@ class Pie {
     });
 
     const loader = new SVGLoader();
+    this.track(loader);
 
     loader.load(
       pieSvgDataUri,
       (data) => {
-        const shapes = data.paths.map((v) => v.toShapes()).flat();
-        const group = new THREE.Group();
-
-        const extrudeSettings = {
-          curveSegments: 256,
-          steps: 2,
-          depth: 1,
-          bevelEnabled: true,
-          bevelThickness: 0.01,
-          bevelSize: 0.01,
-          bevelOffset: 0.0,
-          bevelSegments: 1,
-        };
-
-        shapes.forEach((shape, i) => {
-          const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-          const material = new THREE.MeshPhongMaterial({ color: colors[i % colors.length], wireframe: false });
-          const mesh = new THREE.Mesh(geometry, material);
-          group.add(mesh);
-        });
-
-        group.rotation.x -= Math.PI / 2;
-        group.scale.set(1, 1, height / 100);
-        this.scene.add(group);
-
-        if (animation) {
-          const { delay, duration, activeHeight } = animation;
-
-          let idx = 0;
-          setInterval(() => {
-            idx = idx % group.children.length;
-
-            group.children.forEach((mesh, i) => {
-              if (i === idx) {
-                gsap.fromTo(mesh.scale, null, {
-                  z: activeHeight,
-                  duration,
-                  ease: 'sine.inOut',
-                });
-              } else {
-                gsap.fromTo(mesh.scale, null, {
-                  z: 1,
-                  duration,
-                  ease: 'sine.inOut',
-                });
-              }
-            });
-
-            idx += 1;
-          }, delay * 1000);
-        }
+        this.genPie(data, arcs, arcGenerator);
       },
       (xhr) => {
         // console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
@@ -265,38 +216,120 @@ class Pie {
     );
   }
 
+  /**
+   * @description: 生成饼图
+   * @param {*} data
+   * @param {*} arcs
+   * @param {*} arcGenerator
+   * @return {*}
+   */
+  genPie(data, arcs, arcGenerator) {
+    const { height, animation, colors, activeCallback } = this.options;
+    const shapes = data.paths.map((v) => v.toShapes()).flat();
+    const group = new THREE.Group();
+
+    const extrudeSettings = {
+      curveSegments: 256,
+      steps: 2,
+      depth: 1,
+      bevelEnabled: true,
+      bevelThickness: 0.01,
+      bevelSize: 0.01,
+      bevelOffset: 0.0,
+      bevelSegments: 1,
+    };
+
+    shapes.forEach((shape, i) => {
+      const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+      const material = new THREE.MeshPhongMaterial({ color: colors[i % colors.length], wireframe: false });
+      const mesh = new THREE.Mesh(geometry, material);
+      group.add(mesh);
+    });
+
+    group.rotation.x -= Math.PI / 2;
+    group.scale.set(1, 1, height / 100);
+    this.scene.add(group);
+    this.track(group);
+
+    if (animation) {
+      const { delay, duration, activeHeight } = animation;
+
+      let idx = 0;
+
+      const loopCb = () => {
+        idx = idx % group.children.length;
+
+        group.children.forEach((mesh, i) => {
+          if (i === idx) {
+            gsap.fromTo(mesh.scale, null, {
+              z: activeHeight,
+              duration,
+              ease: 'sine.inOut',
+            });
+
+            if (typeof activeCallback === 'function') {
+              activeCallback(arcs[idx].data, idx);
+            }
+          } else {
+            gsap.fromTo(mesh.scale, null, {
+              z: 1,
+              duration,
+              ease: 'sine.inOut',
+            });
+          }
+        });
+
+        idx += 1;
+      };
+
+      // 定时轮询
+      this._interval = setInterval(loopCb, delay * 1000);
+
+      // 初始执行
+      loopCb();
+    }
+
+    // console.log('renderer.info', this.renderer.info);
+  }
+
+  /**
+   * @description: 销毁实例
+   * @return {*}
+   */
+  dispose() {
+    if (this._interval) {
+      clearInterval(this._interval);
+      this._interval = null;
+    }
+
+    if (this.scene) {
+      this.scene.clear();
+      this.scene = null;
+    }
+
+    if (this.resMgr) {
+      this.resMgr.dispose();
+    }
+
+    if (this.renderer) {
+      this.renderer.setAnimationLoop(null);
+      this.renderer.dispose();
+      this.renderer.forceContextLoss();
+      this.renderer.content = null;
+      let gl = this.renderer.domElement.getContext('webgl');
+      gl && gl.getExtension('WEBGL_lose_context').loseContext();
+      this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+      // console.log('dispose renderer.info', this.renderer.info);
+      this.renderer = null;
+    }
+  }
+
+  /**
+   * @description: ratio getter
+   * @return {*}
+   */
   get ratio() {
     return this.width / this.height;
-  }
-
-  /**
-   * @description: 激活饼图
-   * @param {*} idx
-   * @return {*}
-   */
-  activePie(idx) {
-    if (this._options.data[idx].active) return;
-
-    this._options.data.forEach((v, i) => {
-      v.active = i === idx;
-    });
-
-    this.updateOptionsDebounce();
-  }
-
-  /**
-   * @description: 取消激活饼图
-   * @param {*} idx
-   * @return {*}
-   */
-  inactivePie(idx) {
-    if (!this._options.data[idx].active) return;
-
-    this._options.data.forEach((v) => {
-      v.active = false;
-    });
-
-    this.updateOptionsDebounce();
   }
 }
 

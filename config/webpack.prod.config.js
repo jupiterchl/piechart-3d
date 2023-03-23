@@ -26,23 +26,30 @@ const webpackProdConfig = {
     rules: [
       {
         test: /\.css$/,
-        use: [MiniCssExtractPlugin.loader, 'css-loader'],
+        use: ['style-loader', 'css-loader'],
       },
       {
         test: /\.scss$/,
-        use: [MiniCssExtractPlugin.loader, 'css-loader', 'sass-loader'],
+        use: ['style-loader', 'css-loader', 'sass-loader'],
       },
       {
         test: /\.sass$/,
-        use: [MiniCssExtractPlugin.loader, 'css-loader', 'sass-loader?indentedSyntax'],
+        use: ['style-loader', 'css-loader', 'sass-loader?indentedSyntax'],
       },
     ],
   },
   optimization: {
     minimize: true,
-    minimizer: [new TerserPlugin(), new CssMinimizerWebpackPlugin()],
+    minimizer: [new TerserPlugin({ extractComments: false }), new CssMinimizerWebpackPlugin()],
   },
-  externals: {},
+  externals: [
+    {
+      three: true,
+      gsap: true,
+      'd3-shape': true,
+    },
+    /^lodash/,
+  ],
   plugins: [new CleanWebpackPlugin(), new MiniCssExtractPlugin()],
 };
 

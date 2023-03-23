@@ -3,7 +3,8 @@ import Pie from './plugin';
 
 function init() {
   const options = {
-    data: [1.5, 0.78, 0.62, 0.48],
+    debug: true,
+    data: [38, 40, 28, 5],
     innerRadius: 0,
     outerRadius: 150,
     cornerRadius: 0,
@@ -14,18 +15,32 @@ function init() {
       duration: 0.75,
       activeHeight: 1.5,
     },
+    light: {
+      ambientLight: {
+        color: '#fff',
+        intensity: 0.3,
+      },
+    },
   };
-  const myPie = new Pie('.chart1', options);
 
-  const myPie1 = new Pie('.chart2', options);
+  let pie = null;
 
-  // document.getElementById('click').addEventListener(
-  //   'click',
-  //   () => {
-  //     myPie.setOption(randomCfg());
-  //   },
-  //   false
-  // );
+  document.getElementById('mount').addEventListener(
+    'click',
+    () => {
+      pie = new Pie('.chart', options);
+      console.log('pie', pie);
+    },
+    false
+  );
+
+  document.getElementById('dispose').addEventListener(
+    'click',
+    () => {
+      pie.dispose();
+    },
+    false
+  );
 }
 
 function randomCfg() {
