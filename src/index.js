@@ -4,26 +4,41 @@ import Pie from './plugin';
 function init() {
   const options = {
     debug: true,
-    data: [38, 40, 28, 5],
+    data: [38, 40, 28, 5, 20],
     innerRadius: 0,
     outerRadius: 150,
     cornerRadius: 0,
     padAngle: 0,
     height: 40,
     animation: {
-      delay: 2,
       duration: 0.75,
       activeHeight: 1.5,
     },
-    light: {
-      ambientLight: {
-        color: '#fff',
-        intensity: 0.3,
+    autoplay: {
+      index: 0,
+      delay: 2,
+    },
+    // light: {
+    //   ambientLight: {
+    //     color: '#fff',
+    //     intensity: 0.3,
+    //   },
+    // },
+    on: {
+      mouseenter(index, mesh, group, e) {
+        console.log('mouseenter', index);
+        mesh.material.color.set('#ff0000');
+      },
+      mouseleave(index, mesh, group, e) {
+        console.log('mouseleave', index);
+        mesh.material.color.set(mesh._color);
       },
     },
   };
 
   let pie = null;
+
+  pie = new Pie('.chart', options);
 
   document.getElementById('mount').addEventListener(
     'click',

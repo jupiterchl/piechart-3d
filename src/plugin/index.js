@@ -8,6 +8,7 @@ import castArray from 'lodash.castarray';
 import upperFirst from 'lodash.upperfirst';
 import makePie from './libs/makePie';
 import ResourceTracker from './libs/ResourceTracker';
+import Handler, { events } from './libs/Handler';
 
 const defaultOptions = {
   data: [],
@@ -49,15 +50,28 @@ const defaultOptions = {
     },
   },
   activeCallback: null,
+  on: null,
 };
 
 class Pie {
   constructor(el, options) {
     this.$el = typeof el === 'string' ? document.querySelector(el) : el;
-    this.options = merge({}, defaultOptions, options);
+    this.options = merge({}, defaultOptions, options, {
+      on: {
+        mouseenter: (index) => {
+          this.stopAutoplay();
+          this.active(index);
+        },
+        mouseleave: (index) => {
+          this.startAutoplay(index + 1);
+        },
+      },
+    });
 
     this.resMgr = new ResourceTracker();
     this.track = this.resMgr.track.bind(this.resMgr);
+
+    this.handler = new Handler();
 
     this.init();
   }
@@ -67,6 +81,8 @@ class Pie {
   renderer;
   scene;
   camera;
+  raycaster;
+  pie;
 
   /**
    * @description: 初始化
@@ -75,6 +91,7 @@ class Pie {
   init() {
     this.initData();
     this.initFrame();
+    this.initEvent();
     this.buildPie();
   }
 
@@ -117,6 +134,31 @@ class Pie {
       this.renderer.render(this.scene, this.camera);
     };
     this.renderer.setAnimationLoop(animation);
+  }
+
+  /**
+   * @description: 初始化事件
+   * @return {*}
+   */
+  initEvent() {
+    this.raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    const handler = (e) => {
+      console.log('e.type', e.type);
+      mouse.x = (e.offsetX / this.width) * 2 - 1;
+      mouse.y = -(e.offsetY / this.height) * 2 + 1;
+      this.raycaster.setFromCamera(mouse, this.camera);
+      this.handler.emit(e.type, e);
+    };
+
+    events.forEach((type) => {
+      this.$el.addEventListener(type, handler, false);
+
+      this.handler.on('unbind', () => {
+        this.$el.removeEventListener(type, handler, false);
+      });
+    });
   }
 
   /**
@@ -224,7 +266,7 @@ class Pie {
    * @return {*}
    */
   genPie(data, arcs, arcGenerator) {
-    const { height, animation, colors, activeCallback } = this.options;
+    const { data: _data, height, animation, colors, activeCallback, on } = this.options;
     const shapes = data.paths.map((v) => v.toShapes()).flat();
     const group = new THREE.Group();
 
@@ -243,53 +285,116 @@ class Pie {
       const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
       const material = new THREE.MeshPhongMaterial({ color: colors[i % colors.length], wireframe: false });
       const mesh = new THREE.Mesh(geometry, material);
+      mesh._color = colors[i % colors.length];
       group.add(mesh);
     });
 
     group.rotation.x -= Math.PI / 2;
     group.scale.set(1, 1, height / 100);
+    this.pie = group;
     this.scene.add(group);
     this.track(group);
 
-    if (animation) {
-      const { delay, duration, activeHeight } = animation;
+    // 添加事件
+    const handler = () => {
+      let _index = -1;
+      return (e) => {
+        const intersects = this.raycaster.intersectObject(group);
+        const index = group.children.findIndex((v) => v === intersects[0]?.object);
 
-      let idx = 0;
+        if (index !== _index) {
+          // mouseleave
+          if (_index > -1 && typeof on?.mouseleave === 'function') {
+            on.mouseleave(_index, _data[_index], e);
+          }
+
+          // mouseenter
+          if (index > -1 && typeof on?.mouseenter === 'function') {
+            on.mouseenter(index, _data[index], e);
+          }
+
+          _index = index;
+        }
+
+        if (typeof on?.[e.type] === 'function') {
+          on[e.type](index, _data[index], e);
+        }
+      };
+    };
+    this.handler.all(handler());
+
+    this.startAutoplay();
+
+    // console.log('renderer.info', this.renderer.info);
+  }
+
+  /**
+   * @description: 开启自动播放
+   * @return {*}
+   */
+  startAutoplay(activeIndex) {
+    const { autoplay } = this.options;
+
+    if (autoplay) {
+      const { index, delay } = autoplay;
+      let idx = activeIndex ?? index ?? 0;
 
       const loopCb = () => {
-        idx = idx % group.children.length;
-
-        group.children.forEach((mesh, i) => {
-          if (i === idx) {
-            gsap.fromTo(mesh.scale, null, {
-              z: activeHeight,
-              duration,
-              ease: 'sine.inOut',
-            });
-
-            if (typeof activeCallback === 'function') {
-              activeCallback(arcs[idx].data, idx);
-            }
-          } else {
-            gsap.fromTo(mesh.scale, null, {
-              z: 1,
-              duration,
-              ease: 'sine.inOut',
-            });
-          }
-        });
-
-        idx += 1;
+        this.active(idx++ % this.pie.children.length);
       };
 
       // 定时轮询
-      this._interval = setInterval(loopCb, delay * 1000);
+      let interval = setInterval(loopCb, delay * 1000);
+
+      const unbind = () => {
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+      };
+      this.handler.emit('clearInterval');
+      this.handler.once('clearInterval', unbind);
 
       // 初始执行
       loopCb();
     }
+  }
 
-    // console.log('renderer.info', this.renderer.info);
+  /**
+   * @description: 停止自动播放
+   * @return {*}
+   */
+  stopAutoplay() {
+    this.handler.emit('clearInterval');
+  }
+
+  /**
+   * @description: 激活饼图块
+   * @param {*} index
+   * @return {*}
+   */
+  active(index) {
+    const { duration, activeHeight } = this.options.animation;
+
+    this.pie?.children.forEach((mesh, i) => {
+      if (i === index) {
+        gsap.fromTo(mesh.scale, null, {
+          z: activeHeight,
+          duration,
+          ease: 'sine.inOut',
+        });
+      } else {
+        gsap.fromTo(mesh.scale, null, {
+          z: 1,
+          duration,
+          ease: 'sine.inOut',
+        });
+      }
+    });
+
+    //     if (typeof activeCallback === 'function') {
+    //       activeCallback(arcs[idx].data, idx);
+    //     }
   }
 
   /**
@@ -297,10 +402,10 @@ class Pie {
    * @return {*}
    */
   dispose() {
-    if (this._interval) {
-      clearInterval(this._interval);
-      this._interval = null;
-    }
+    this.stopAutoplay();
+
+    this.handler.emit('unbind');
+    this.handler.clear();
 
     if (this.scene) {
       this.scene.clear();

@@ -17,7 +17,7 @@ const webpackDevConfig = {
     hot: true,
     port: 8080,
   },
-  devtool: 'eval',
+  devtool: 'source-map',
 };
 
 module.exports = merge(webpackBaseConfig, webpackDevConfig);
