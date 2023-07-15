@@ -6,10 +6,39 @@
   </head>
   <body>
     <div id="app">
+      <!-- 图标节点 -->
       <div class="chart"></div>
+
+      <!-- 图例 -->
+      <fieldset id="legend">
+        <legend>图例</legend>
+        <div>
+          <input type="checkbox" id="p1" name="p1" checked />
+          <label for="p1">项目一</label>
+        </div>
+        <div>
+          <input type="checkbox" id="p2" name="p2" checked />
+          <label for="p2">项目二</label>
+        </div>
+        <div>
+          <input type="checkbox" id="p3" name="p3" checked />
+          <label for="p3">项目三</label>
+        </div>
+        <div>
+          <input type="checkbox" id="p4" name="p4" checked />
+          <label for="p4">项目四</label>
+        </div>
+        <div>
+          <input type="checkbox" id="p5" name="p5" checked />
+          <label for="p5">项目五</label>
+        </div>
+      </fieldset>
+
+      <!-- 操作 -->
       <div class="btns">
         <button id="mount">挂载</button>
         <button id="dispose">销毁</button>
+        <button id="update">更新</button>
       </div>
     </div>
     <script src="/dist/build.js"></script>

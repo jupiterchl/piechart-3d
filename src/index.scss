@@ -21,3 +21,13 @@ body {
 .btns {
   margin-top: 20px;
 }
+
+fieldset {
+  position: absolute;
+  left: 50%;
+  margin-left: 350px;
+
+  label {
+    cursor: pointer;
+  }
+}

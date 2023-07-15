@@ -6,9 +6,9 @@ import gsap from 'gsap';
 import merge from 'lodash.merge';
 import castArray from 'lodash.castarray';
 import upperFirst from 'lodash.upperfirst';
-import makePie from './libs/makePie';
 import ResourceTracker from './libs/ResourceTracker';
 import Handler, { events } from './libs/Handler';
+import { arc, pie } from 'd3-shape';
 
 const defaultOptions = {
   data: [],
@@ -59,11 +59,12 @@ class Pie {
     this.options = merge({}, defaultOptions, options, {
       on: {
         mouseenter: (index) => {
-          this.stopAutoplay();
+          // this.stopAutoplay();
           this.active(index);
         },
         mouseleave: (index) => {
-          this.startAutoplay(index + 1);
+          // this.startAutoplay(index + 1);
+          this.active(-1);
         },
       },
     });
@@ -83,6 +84,7 @@ class Pie {
   camera;
   raycaster;
   pie;
+  updateEvents;
 
   /**
    * @description: 初始化
@@ -124,14 +126,20 @@ class Pie {
     // this.scene.background = new THREE.Color(0xf0f0f0);
 
     this.camera = new THREE.PerspectiveCamera(50, this.ratio, 0.1, 100);
-    this.camera.position.set(0, 3, 4);
+    this.camera.position.set(0, 2, 3);
     this.camera.lookAt(0, 0, 0);
 
     this.buildAuxSystem();
     this.buildLightSystem();
 
+    this.updateEvents = [];
+
     const animation = (time) => {
       this.renderer.render(this.scene, this.camera);
+
+      this.updateEvents.forEach((event) => {
+        event(time);
+      });
     };
     this.renderer.setAnimationLoop(animation);
   }
@@ -174,7 +182,7 @@ class Pie {
     this.track(axisHelper);
 
     // 网格
-    const gridHelper = new THREE.GridHelper(100, 50);
+    const gridHelper = new THREE.GridHelper(100, 100);
     this.scene.add(gridHelper);
     this.track(gridHelper);
 
@@ -227,45 +235,123 @@ class Pie {
     });
   }
 
+  setLegends(fn) {
+    const legends = this.legends ?? this.options.data.map((v) => true);
+    this.legends = fn(legends.slice());
+    this.buildPie();
+  }
+
   /**
    * @description: 构建饼图
    * @return {*}
    */
   buildPie() {
-    const { data, parseValue, innerRadius, outerRadius, cornerRadius, padAngle } = this.options;
-    const { pieSvgDataUri, arcs, arcGenerator } = makePie(data, {
-      parseValue,
-      innerRadius,
-      outerRadius,
-      cornerRadius,
-      padAngle,
+    const { data, parseValue } = this.options;
+    const loader = new SVGLoader();
+    // this.track(loader);
+
+    const update = (pieSvgDataUri, arcs) => {
+      loader.load(
+        pieSvgDataUri,
+        (data) => {
+          this.genPie(data, arcs);
+        },
+        (xhr) => {
+          // console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
+        },
+        (error) => {
+          console.error('SVGLoader: An error happened', error);
+        }
+      );
+    };
+
+    const _data = data.map((v, i) => {
+      if (this.legends?.[i] === false) {
+        return 0;
+      }
+      return parseValue(v);
     });
 
-    const loader = new SVGLoader();
-    this.track(loader);
+    this.makePie(_data, update);
+  }
 
-    loader.load(
-      pieSvgDataUri,
-      (data) => {
-        this.genPie(data, arcs, arcGenerator);
-      },
-      (xhr) => {
-        // console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
-      },
-      (error) => {
-        console.error('SVGLoader: An error happened', error);
+  makePie(data, update) {
+    const { innerRadius, outerRadius, cornerRadius, padAngle } = this.options;
+
+    const arcs = pie()
+      .sortValues(() => 0) // 设置为不排序，默认降序
+      .startAngle(() => Math.PI) // 设置起点为12点钟方向，默认6点钟方向
+      .endAngle(() => -Math.PI)(data); // 设置方向为顺时针，默认逆时针
+
+    const arcGenerator = arc()
+      .innerRadius(innerRadius)
+      .outerRadius(outerRadius)
+      .cornerRadius(cornerRadius)
+      .padAngle(padAngle);
+
+    let curArray = Array.from({ length: arcs.length }, () => 0);
+    let endArray = arcs.map((v) => v.endAngle - v.startAngle);
+
+    if (this.curArcs) {
+      curArray = this.curArcs.map((v) => v.endAngle - v.startAngle);
+      endArray = arcs.map((v) => v.endAngle - v.startAngle);
+    }
+
+    const onUpdate = () => {
+      let curArcs = [];
+
+      for (let i = 0, len = arcs.length; i < len; i++) {
+        const arc = arcs[i];
+        let startAngle;
+
+        if (i === 0) {
+          startAngle = arc.startAngle;
+        } else {
+          startAngle = curArcs[i - 1].endAngle;
+        }
+
+        const endAngle = startAngle + curArray[i];
+
+        curArcs.push({ ...arc, startAngle, endAngle });
       }
-    );
+
+      this.curArcs = curArcs;
+
+      const pieSvgDataUri = `data:image/svg+xml;base64,${btoa(`
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <g>
+            ${curArcs.map((arcData, i) => `<path d="${arcGenerator(arcData)}" />`)}
+          </g>
+        </svg>
+      `)}`;
+
+      update(pieSvgDataUri, curArcs);
+    };
+
+    if (this.animate) {
+      this.animate.kill();
+    }
+
+    this.animate = gsap.to(curArray, {
+      endArray,
+      // duration: 3,
+      onUpdate,
+      onComplete: () => {
+        console.log('complete');
+        this.animate.kill();
+        this.animate = null;
+
+        this.bindEvent();
+      },
+    });
   }
 
   /**
    * @description: 生成饼图
    * @param {*} data
-   * @param {*} arcs
-   * @param {*} arcGenerator
    * @return {*}
    */
-  genPie(data, arcs, arcGenerator) {
+  genPie(data, arcs) {
     const { data: _data, height, animation, colors, activeCallback, on } = this.options;
     const shapes = data.paths.map((v) => v.toShapes()).flat();
     const group = new THREE.Group();
@@ -273,59 +359,81 @@ class Pie {
     const extrudeSettings = {
       curveSegments: 256,
       steps: 2,
-      depth: 1,
+      depth: 0.2,
       bevelEnabled: true,
       bevelThickness: 0.01,
-      bevelSize: 0.01,
+      bevelSize: 0.005,
       bevelOffset: 0.0,
       bevelSegments: 1,
     };
 
     shapes.forEach((shape, i) => {
-      const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-      const material = new THREE.MeshPhongMaterial({ color: colors[i % colors.length], wireframe: false });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh._color = colors[i % colors.length];
-      group.add(mesh);
+      if (arcs[i].startAngle !== arcs[i].endAngle) {
+        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        const material = new THREE.MeshPhongMaterial({ color: colors[i % colors.length], wireframe: false });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh._index = i;
+        mesh._color = colors[i % colors.length];
+        group.add(mesh);
+      }
     });
 
     group.rotation.x -= Math.PI / 2;
-    group.scale.set(1, 1, height / 100);
+    // this.pie = group;
+
+    if (this.pie) {
+      this.scene.remove(this.pie);
+    }
     this.pie = group;
     this.scene.add(group);
-    this.track(group);
+    // this.track(group);
 
-    // 添加事件
+    // this.startAutoplay();
+
+    // console.log('renderer.info', this.renderer.info);
+  }
+
+  bindEvent() {
+    const { data, on } = this.options;
+    const group = this.pie;
+
     const handler = () => {
       let _index = -1;
       return (e) => {
         const intersects = this.raycaster.intersectObject(group);
-        const index = group.children.findIndex((v) => v === intersects[0]?.object);
+        const mesh = group.children.find((v) => v === intersects[0]?.object);
+        const index = mesh?._index ?? -1;
 
         if (index !== _index) {
           // mouseleave
           if (_index > -1 && typeof on?.mouseleave === 'function') {
-            on.mouseleave(_index, _data[_index], e);
+            on.mouseleave(_index, data[_index], e);
           }
 
           // mouseenter
           if (index > -1 && typeof on?.mouseenter === 'function') {
-            on.mouseenter(index, _data[index], e);
+            on.mouseenter(index, data[index], e);
           }
 
           _index = index;
         }
 
         if (typeof on?.[e.type] === 'function') {
-          on[e.type](index, _data[index], e);
+          on[e.type](index, data[index], e);
         }
       };
     };
-    this.handler.all(handler());
 
-    this.startAutoplay();
+    const _handler = handler();
+    this.handler.all(_handler);
 
-    // console.log('renderer.info', this.renderer.info);
+    if (this.unbind) {
+      this.unbind();
+    }
+
+    this.unbind = () => {
+      this.handler.none(_handler);
+    };
   }
 
   /**
@@ -374,21 +482,24 @@ class Pie {
    * @return {*}
    */
   active(index) {
+    if (!this.options.animation) return;
     const { duration, activeHeight } = this.options.animation;
 
-    this.pie?.children.forEach((mesh, i) => {
-      if (i === index) {
-        gsap.fromTo(mesh.scale, null, {
-          z: activeHeight,
-          duration,
-          ease: 'sine.inOut',
-        });
+    this.pie?.children.forEach((mesh) => {
+      if (!mesh.tw) {
+        mesh.tw = gsap
+          .to(mesh.scale, {
+            z: activeHeight,
+            duration,
+            ease: 'sine.inOut',
+          })
+          .pause();
+      }
+
+      if (mesh._index === index) {
+        mesh.tw.play();
       } else {
-        gsap.fromTo(mesh.scale, null, {
-          z: 1,
-          duration,
-          ease: 'sine.inOut',
-        });
+        mesh.tw.reverse();
       }
     });
 

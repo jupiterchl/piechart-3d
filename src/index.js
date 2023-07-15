@@ -6,18 +6,18 @@ function init() {
     debug: true,
     data: [38, 40, 28, 5, 20],
     innerRadius: 0,
-    outerRadius: 150,
+    outerRadius: 1,
     cornerRadius: 0,
     padAngle: 0,
-    height: 40,
+    height: 0.2,
     animation: {
-      duration: 0.75,
-      activeHeight: 1.5,
+      duration: 0.25,
+      activeHeight: 2,
     },
-    autoplay: {
-      index: 0,
-      delay: 2,
-    },
+    // autoplay: {
+    //   index: 0,
+    //   delay: 2,
+    // },
     // light: {
     //   ambientLight: {
     //     color: '#fff',
@@ -53,6 +53,31 @@ function init() {
     'click',
     () => {
       pie.dispose();
+    },
+    false
+  );
+
+  document.getElementById('update').addEventListener(
+    'click',
+    () => {
+      pie.dispose();
+      pie.init();
+    },
+    false
+  );
+
+  document.getElementById('legend').addEventListener(
+    'click',
+    (e) => {
+      if (e.target.nodeName === 'INPUT') {
+        const checked = e.target.checked;
+        const index = Number(e.target.id[1]) - 1;
+        // console.log(checked, index);
+        pie.setLegends((legends) => {
+          legends[index] = checked;
+          return legends;
+        });
+      }
     },
     false
   );
