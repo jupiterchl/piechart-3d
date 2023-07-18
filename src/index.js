@@ -1,19 +1,31 @@
 import './index.scss';
 import Pie from './plugin';
+// import Pie from '../es/pieChart3d.js';
 
 function init() {
   const options = {
-    debug: true,
-    data: [38, 40, 28, 5, 20],
-    innerRadius: 0,
+    debug: false,
+    data: Array.from({ length: 6 }, () => Math.floor(Math.random() * 100)),
+    innerRadius: 0.7,
     outerRadius: 1,
     cornerRadius: 0,
     padAngle: 0,
     height: 0.2,
-    animation: {
+    activeAnimation: {
       duration: 0.25,
-      activeHeight: 2,
+      heightScale: 2,
     },
+    label: {
+      show: false,
+      position: 0.85,
+      render({ percent, color }) {
+        const div = document.createElement('div');
+        div.innerText = Number((percent * 100).toFixed(2)) + '%';
+        div.style.background = color;
+        return div;
+      },
+    },
+    autoplay: true,
     // autoplay: {
     //   index: 0,
     //   delay: 2,
@@ -25,24 +37,26 @@ function init() {
     //   },
     // },
     on: {
-      mouseenter(index, mesh, group, e) {
-        console.log('mouseenter', index);
-        mesh.material.color.set('#ff0000');
+      mouseenter(e) {
+        console.log('mouseenter', e);
       },
-      mouseleave(index, mesh, group, e) {
-        console.log('mouseleave', index);
-        mesh.material.color.set(mesh._color);
+      mouseleave(e) {
+        console.log('mouseleave', e);
+      },
+      active(e) {
+        console.log('active', e);
       },
     },
   };
 
   let pie = null;
 
-  pie = new Pie('.chart', options);
+  // pie = new Pie('.chart', options);
 
   document.getElementById('mount').addEventListener(
     'click',
     () => {
+      pie?.dispose();
       pie = new Pie('.chart', options);
       console.log('pie', pie);
     },
@@ -52,28 +66,34 @@ function init() {
   document.getElementById('dispose').addEventListener(
     'click',
     () => {
-      pie.dispose();
+      pie?.dispose();
     },
     false
   );
 
-  document.getElementById('update').addEventListener(
-    'click',
-    () => {
-      pie.dispose();
-      pie.init();
-    },
-    false
-  );
+  const legendHandler = (e) => {
+    const index = Number(e.target.getAttribute('data-idx')) - 1;
 
-  document.getElementById('legend').addEventListener(
+    switch (e.type) {
+      case 'mouseenter':
+        pie?.activate(index);
+        break;
+      case 'mouseleave':
+        pie?.deactivate();
+        break;
+    }
+  };
+
+  const legendEl = document.getElementById('legend');
+
+  legendEl.addEventListener(
     'click',
     (e) => {
       if (e.target.nodeName === 'INPUT') {
         const checked = e.target.checked;
         const index = Number(e.target.id[1]) - 1;
-        // console.log(checked, index);
-        pie.setLegends((legends) => {
+
+        pie?.setLegendChecked((legends) => {
           legends[index] = checked;
           return legends;
         });
@@ -81,6 +101,10 @@ function init() {
     },
     false
   );
+  // [...legendEl.querySelectorAll('div')].forEach((el) => {
+  //   el.addEventListener('mouseenter', legendHandler, false);
+  //   el.addEventListener('mouseleave', legendHandler, false);
+  // });
 }
 
 function randomCfg() {

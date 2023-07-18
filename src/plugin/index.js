@@ -3,22 +3,24 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import gsap from 'gsap';
-import merge from 'lodash.merge';
-import castArray from 'lodash.castarray';
-import upperFirst from 'lodash.upperfirst';
-import ResourceTracker from './libs/ResourceTracker';
-import Handler, { events } from './libs/Handler';
 import { arc, pie } from 'd3-shape';
+import { merge, clamp, upperFirst, isFunction, debounce } from 'lodash-es';
+import mitt from 'mitt';
+import ResourceTracker from './libs/ResourceTracker';
+
+const PREFIX = 'PIE';
+const EVENTS = ['mousemove', 'click'];
 
 const defaultOptions = {
-  data: [],
-  parseValue: (v) => v,
-  innerRadius: 0,
-  outerRadius: 100,
-  cornerRadius: 0,
-  padAngle: 0,
-  height: 40,
-  animation: null,
+  debug: false,
+
+  data: [], // [5, 2, 3, 4]
+  innerRadius: 0, // 0-1
+  outerRadius: 1, // 0-1
+  cornerRadius: 0, // 0-0.5 (outerRadius-innerRadius)/2
+  padAngle: 0, // 0-0.1
+  height: 0.2, // 0-0.5
+
   colors: [
     '#3b82f6', // blue
     '#f43f5e', // rose
@@ -38,153 +40,185 @@ const defaultOptions = {
     '#f59e0b', // amber
     '#ef4444', // red
   ],
-  light: {
-    ambientLight: {
+  lights: [
+    {
+      type: 'ambientLight',
       color: '#fff',
       intensity: 0.3,
     },
-    spotLight: {
+    {
+      type: 'spotLight',
       color: '#fff',
       intensity: 1,
       position: [5, 5, 5],
     },
+  ],
+
+  label: {
+    show: false,
+    position: 0.7,
+    render: null,
   },
-  activeCallback: null,
-  on: null,
+  activeAnimation: null, // { duration: 0.25, heightScale: 2 }
+  autoplay: false, // boolean|number 自动播放间隔时长
+
+  on: null, // { mouseenter, mouseleave, active }
 };
 
 class Pie {
   constructor(el, options) {
     this.$el = typeof el === 'string' ? document.querySelector(el) : el;
-    this.options = merge({}, defaultOptions, options, {
-      on: {
-        mouseenter: (index) => {
-          // this.stopAutoplay();
-          this.active(index);
-        },
-        mouseleave: (index) => {
-          // this.startAutoplay(index + 1);
-          this.active(-1);
-        },
-      },
-    });
+    this.options = merge({}, defaultOptions, options);
 
-    this.resMgr = new ResourceTracker();
-    this.track = this.resMgr.track.bind(this.resMgr);
-
-    this.handler = new Handler();
-
-    this.init();
+    // 初始化
+    this.#init();
   }
 
-  width;
-  height;
-  renderer;
-  scene;
-  camera;
-  raycaster;
-  pie;
-  updateEvents;
+  #emitter = mitt();
+  #tracker = new ResourceTracker();
+
+  #width = null;
+  #height = null;
+  #renderer = null;
+  #scene = null;
+  #camera = null;
+  #raycaster = null;
+  #domEvents = [];
+  #pie = null;
+  #legends = [];
+  #arcs = null;
+  #labels = [];
+  #makePieAnimate = null;
+  #runtimeEvents = [];
+  #debounceCompleteCb = null;
+  #svgLoader = null;
+  #disposed = false;
+
+  #autoplay = {
+    activeIndex: 0,
+    interval: null,
+    resumeTimeout: null,
+  };
 
   /**
    * @description: 初始化
    * @return {*}
    */
-  init() {
-    this.initData();
-    this.initFrame();
-    this.initEvent();
-    this.buildPie();
+  #init() {
+    this.#initData();
+    this.#initEvent();
+    this.#initFrame();
+    this.#buildPie();
   }
 
   /**
    * @description: 初始化数据
    * @return {*}
    */
-  initData() {
+  #initData() {
     if (this.$el) {
-      this.width = this.$el.clientWidth;
-      this.height = this.$el.clientHeight;
+      this.#width = this.$el.clientWidth;
+      this.#height = this.$el.clientHeight;
     } else {
       throw new Error('dom节点不存在');
     }
-  }
 
-  /**
-   * @description: 初始化界面
-   * @return {*}
-   */
-  initFrame() {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setSize(this.width, this.height);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.BasicShadowMap;
-    this.$el.appendChild(this.renderer.domElement);
+    const { data } = this.options;
 
-    this.scene = new THREE.Scene();
-    // this.scene.background = new THREE.Color(0xf0f0f0);
-
-    this.camera = new THREE.PerspectiveCamera(50, this.ratio, 0.1, 100);
-    this.camera.position.set(0, 2, 3);
-    this.camera.lookAt(0, 0, 0);
-
-    this.buildAuxSystem();
-    this.buildLightSystem();
-
-    this.updateEvents = [];
-
-    const animation = (time) => {
-      this.renderer.render(this.scene, this.camera);
-
-      this.updateEvents.forEach((event) => {
-        event(time);
-      });
-    };
-    this.renderer.setAnimationLoop(animation);
+    this.#legends = data.map(() => true);
   }
 
   /**
    * @description: 初始化事件
    * @return {*}
    */
-  initEvent() {
-    this.raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
+  #initEvent() {
+    const { on } = this.options;
+
+    if (on) {
+      Object.entries(on).forEach(([type, handler]) => {
+        this.#emitter.on(type, handler);
+      });
+    }
+
+    this.#emitter.on('mouseenter', ({ index }) => {
+      this.#onMouseenter(index);
+    });
+    this.#emitter.on('mouseleave', () => {
+      this.#onMouseleave();
+    });
+
+    this.#raycaster = new THREE.Raycaster();
 
     const handler = (e) => {
-      console.log('e.type', e.type);
-      mouse.x = (e.offsetX / this.width) * 2 - 1;
-      mouse.y = -(e.offsetY / this.height) * 2 + 1;
-      this.raycaster.setFromCamera(mouse, this.camera);
-      this.handler.emit(e.type, e);
+      const mouse = new THREE.Vector2();
+      mouse.x = (e.offsetX / this.#width) * 2 - 1;
+      mouse.y = -(e.offsetY / this.#height) * 2 + 1;
+      this.#raycaster.setFromCamera(mouse, this.#camera);
+      this.#emitter.emit(`${PREFIX}:${e.type}`, e);
     };
 
-    events.forEach((type) => {
+    EVENTS.forEach((type) => {
       this.$el.addEventListener(type, handler, false);
 
-      this.handler.on('unbind', () => {
+      const unbind = () => {
         this.$el.removeEventListener(type, handler, false);
-      });
+      };
+      this.#domEvents.push(unbind);
     });
+  }
+
+  /**
+   * @description: 初始化界面
+   * @return {*}
+   */
+  #initFrame() {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(this.#width, this.#height);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.BasicShadowMap;
+    this.$el.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    // scene.background = new THREE.Color(0xf0f0f0);
+
+    const camera = new THREE.PerspectiveCamera(50, this.ratio, 0.1, 100);
+    camera.position.set(0, 2, 3);
+    camera.lookAt(0, 0, 0);
+
+    const animation = (time) => {
+      renderer.render(scene, camera);
+
+      // 更新标签
+      this.#updateLabel();
+    };
+    renderer.setAnimationLoop(animation);
+
+    this.#renderer = renderer;
+    this.#scene = scene;
+    this.#camera = camera;
+
+    this.#buildAuxSystem();
+    this.#buildLightSystem();
   }
 
   /**
    * @description: 构建辅助系统
    * @return {*}
    */
-  buildAuxSystem() {
-    if (!this.options.debug) return;
+  #buildAuxSystem() {
+    if (!this.openDebug) return;
 
     // 坐标轴
     const axisHelper = new THREE.AxesHelper(10);
-    this.scene.add(axisHelper);
-    this.track(axisHelper);
+    this.#scene.add(axisHelper);
+    this.#tracker.add(axisHelper);
 
     // 网格
     const gridHelper = new THREE.GridHelper(100, 100);
-    this.scene.add(gridHelper);
-    this.track(gridHelper);
+    this.#scene.add(gridHelper);
+    this.#tracker.add(gridHelper);
 
     // 地板
     const floor = new THREE.Mesh(
@@ -196,11 +230,11 @@ class Pie {
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
-    this.scene.add(floor);
-    this.track(floor);
+    this.#scene.add(floor);
+    this.#tracker.add(floor);
 
     // 控制器
-    let controls = new OrbitControls(this.camera, this.renderer.domElement);
+    let controls = new OrbitControls(this.#camera, this.#renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.25;
     controls.rotateSpeed = 0.35;
@@ -210,51 +244,49 @@ class Pie {
    * @description: 构建灯光系统
    * @return {*}
    */
-  buildLightSystem() {
-    const { debug, light } = this.options;
+  #buildLightSystem() {
+    const { lights } = this.options;
 
-    Object.entries(light).forEach(([type, option]) => {
-      const _type = upperFirst(type);
-      if (!option || !THREE[_type]) return;
+    lights.forEach((option) => {
+      const type = upperFirst(option.type);
 
-      castArray(option).forEach(({ color, intensity, position }) => {
-        let _light = new THREE[_type](color, intensity);
+      if (!THREE[type]) return;
 
-        if (position) {
-          _light.position.set(...position);
-        }
+      const { color, intensity, position } = option;
+      let light = new THREE[type](color, intensity);
 
-        if (debug) {
-          const _sphere = new THREE.SphereGeometry(0.2);
-          _light.add(new THREE.Mesh(_sphere, new THREE.MeshBasicMaterial({ color })));
-        }
+      if (position) {
+        light.position.set(...position);
+      }
 
-        this.scene.add(_light);
-        this.track(_light);
-      });
+      if (this.openDebug) {
+        const sphere = new THREE.SphereGeometry(0.1);
+        light.add(new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color })));
+      }
+
+      this.#scene.add(light);
+      this.#tracker.add(light);
     });
-  }
-
-  setLegends(fn) {
-    const legends = this.legends ?? this.options.data.map((v) => true);
-    this.legends = fn(legends.slice());
-    this.buildPie();
   }
 
   /**
    * @description: 构建饼图
    * @return {*}
    */
-  buildPie() {
-    const { data, parseValue } = this.options;
-    const loader = new SVGLoader();
-    // this.track(loader);
+  #buildPie() {
+    const { data } = this.options;
+    let loader = this.#svgLoader;
+
+    if (!loader) {
+      loader = this.#svgLoader = new SVGLoader();
+      this.#tracker.add(loader);
+    }
 
     const update = (pieSvgDataUri, arcs) => {
       loader.load(
         pieSvgDataUri,
         (data) => {
-          this.genPie(data, arcs);
+          this.#genPie(data, arcs);
         },
         (xhr) => {
           // console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
@@ -265,17 +297,18 @@ class Pie {
       );
     };
 
-    const _data = data.map((v, i) => {
-      if (this.legends?.[i] === false) {
-        return 0;
-      }
-      return parseValue(v);
-    });
+    const _data = data.map((v, i) => (this.#legends[i] ? v : 0));
 
-    this.makePie(_data, update);
+    this.#makePie(_data, update);
   }
 
-  makePie(data, update) {
+  /**
+   * @description: 制作饼图
+   * @param {*} data
+   * @param {*} update
+   * @return {*}
+   */
+  #makePie(data, update) {
     const { innerRadius, outerRadius, cornerRadius, padAngle } = this.options;
 
     const arcs = pie()
@@ -292,8 +325,8 @@ class Pie {
     let curArray = Array.from({ length: arcs.length }, () => 0);
     let endArray = arcs.map((v) => v.endAngle - v.startAngle);
 
-    if (this.curArcs) {
-      curArray = this.curArcs.map((v) => v.endAngle - v.startAngle);
+    if (this.#arcs) {
+      curArray = this.#arcs.map((v) => v.endAngle - v.startAngle);
       endArray = arcs.map((v) => v.endAngle - v.startAngle);
     }
 
@@ -315,8 +348,6 @@ class Pie {
         curArcs.push({ ...arc, startAngle, endAngle });
       }
 
-      this.curArcs = curArcs;
-
       const pieSvgDataUri = `data:image/svg+xml;base64,${btoa(`
         <svg xmlns="http://www.w3.org/2000/svg">
           <g>
@@ -325,155 +356,299 @@ class Pie {
         </svg>
       `)}`;
 
+      this.#arcs = curArcs;
+
       update(pieSvgDataUri, curArcs);
     };
 
-    if (this.animate) {
-      this.animate.kill();
-    }
+    this.#stopMakePieAnimate();
 
-    this.animate = gsap.to(curArray, {
+    this.#makePieAnimate = gsap.to(curArray, {
       endArray,
-      // duration: 3,
       onUpdate,
       onComplete: () => {
-        console.log('complete');
-        this.animate.kill();
-        this.animate = null;
-
-        this.bindEvent();
+        this.#stopMakePieAnimate();
       },
     });
   }
 
   /**
-   * @description: 生成饼图
-   * @param {*} data
+   * @description: 停止makePie动画
    * @return {*}
    */
-  genPie(data, arcs) {
-    const { data: _data, height, animation, colors, activeCallback, on } = this.options;
+  #stopMakePieAnimate() {
+    if (this.#makePieAnimate) {
+      this.#makePieAnimate.kill();
+      this.#makePieAnimate = null;
+    }
+  }
+
+  /**
+   * @description: 生成饼图
+   * @param {*} data
+   * @param {*} arcs
+   * @return {*}
+   */
+  #genPie(data, arcs) {
+    if (this.#disposed) return;
+
+    const { height, colors } = this.options;
     const shapes = data.paths.map((v) => v.toShapes()).flat();
     const group = new THREE.Group();
 
     const extrudeSettings = {
-      curveSegments: 256,
+      curveSegments: 36,
       steps: 2,
-      depth: 0.2,
+      depth: height,
       bevelEnabled: true,
       bevelThickness: 0.01,
       bevelSize: 0.005,
       bevelOffset: 0.0,
-      bevelSegments: 1,
+      bevelSegments: 3,
     };
 
     shapes.forEach((shape, i) => {
       if (arcs[i].startAngle !== arcs[i].endAngle) {
+        const color = colors[i % colors.length];
         const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        const material = new THREE.MeshPhongMaterial({ color: colors[i % colors.length], wireframe: false });
+        const material = new THREE.MeshPhongMaterial({ color, wireframe: false });
         const mesh = new THREE.Mesh(geometry, material);
-        mesh._index = i;
-        mesh._color = colors[i % colors.length];
+        mesh._index = i; // 标记序号
+        mesh._color = color; // 标记颜色
         group.add(mesh);
       }
     });
 
     group.rotation.x -= Math.PI / 2;
-    // this.pie = group;
 
-    if (this.pie) {
-      this.scene.remove(this.pie);
+    if (this.#pie) {
+      this.#tracker.dispose(this.#pie);
     }
-    this.pie = group;
-    this.scene.add(group);
-    // this.track(group);
+    this.#pie = group;
 
-    // this.startAutoplay();
+    this.#scene.add(group);
+    this.#tracker.add(group);
 
-    // console.log('renderer.info', this.renderer.info);
+    if (!this.#debounceCompleteCb) {
+      this.#debounceCompleteCb = debounce(() => {
+        if (this.#disposed) return;
+
+        this.#bindEvent();
+        this.#startAutoplay();
+      }, 200);
+    }
+
+    this.#debounceCompleteCb();
   }
 
-  bindEvent() {
-    const { data, on } = this.options;
-    const group = this.pie;
+  /**
+   * @description: 绑定事件
+   * @return {*}
+   */
+  #bindEvent() {
+    const handlerFn = () => {
+      let prevIndex = -1;
 
-    const handler = () => {
-      let _index = -1;
       return (e) => {
-        const intersects = this.raycaster.intersectObject(group);
+        const group = this.#pie;
+
+        if (!group) return;
+
+        const intersects = this.#raycaster.intersectObject(group);
         const mesh = group.children.find((v) => v === intersects[0]?.object);
         const index = mesh?._index ?? -1;
 
-        if (index !== _index) {
-          // mouseleave
-          if (_index > -1 && typeof on?.mouseleave === 'function') {
-            on.mouseleave(_index, data[_index], e);
+        if (e.type === 'mousemove') {
+          if (index !== prevIndex) {
+            // mouseleave
+            if (prevIndex > -1) {
+              this.#emitter.emit('mouseleave', this.#getEventParam(prevIndex));
+            }
+
+            // mouseenter
+            if (index > -1) {
+              this.#emitter.emit('mouseenter', this.#getEventParam(index));
+            }
+
+            prevIndex = index;
           }
-
-          // mouseenter
-          if (index > -1 && typeof on?.mouseenter === 'function') {
-            on.mouseenter(index, data[index], e);
-          }
-
-          _index = index;
-        }
-
-        if (typeof on?.[e.type] === 'function') {
-          on[e.type](index, data[index], e);
+        } else {
+          this.#emitter.emit(e.type, this.#getEventParam(index));
         }
       };
     };
 
-    const _handler = handler();
-    this.handler.all(_handler);
-
-    if (this.unbind) {
-      this.unbind();
+    if (this.#runtimeEvents.length) {
+      this.#runtimeEvents.forEach((unbind) => {
+        unbind();
+      });
+      this.#runtimeEvents = [];
     }
 
-    this.unbind = () => {
-      this.handler.none(_handler);
-    };
+    EVENTS.forEach((type) => {
+      const handler = handlerFn();
+      this.#emitter.on(`${PREFIX}:${type}`, handler);
+
+      const unbind = () => {
+        this.#emitter.off(`${PREFIX}:${type}`, handler);
+      };
+      this.#runtimeEvents.push(unbind);
+    });
+  }
+
+  /**
+   * @description: 更新标签
+   * @return {*}
+   */
+  #updateLabel() {
+    const { label } = this.options;
+
+    if (!label || !label.show) {
+      if (this.#labels.length > 0) {
+        this.#labels.forEach((v) => {
+          this.$el.removeChild(v);
+        });
+        this.#labels = [];
+      }
+
+      return;
+    }
+
+    this.#labels.forEach((v) => {
+      v.style.display = 'none';
+    });
+
+    this.#pie?.children.forEach((mesh) => {
+      const index = mesh._index;
+      let labelEl = this.#labels[index];
+
+      if (!labelEl) {
+        const node = document.createElement('div');
+        node.style.position = 'absolute';
+        node.style.top = '0px';
+        node.style.left = '0px';
+        node.style.transform = 'translate(-50%, -100%)';
+        node.style.pointerEvents = 'none';
+
+        if (isFunction(label.render)) {
+          const el = label.render(this.#getEventParam(index));
+          node.appendChild(el);
+        }
+
+        this.$el.appendChild(node);
+
+        labelEl = this.#labels[index] = node;
+      }
+
+      const box = new THREE.Box3().setFromObject(mesh);
+      const vector3 = new THREE.Vector3();
+      const size = box.getSize(vector3);
+      // track box
+
+      const { startAngle, endAngle } = this.#arcs[index];
+      const theta = (startAngle + endAngle) / 2 - Math.PI / 2;
+      const labelPosition = label.position ?? 0.7;
+      const xOffset = Math.cos(theta) * labelPosition;
+      const zOffset = -Math.sin(theta) * labelPosition;
+      const vector = new THREE.Vector3(xOffset, size.y, zOffset);
+      const position = vector.project(this.#camera);
+
+      labelEl.style.zIndex = Math.floor((1 - position.y) * 10000);
+      labelEl.style.display = 'flex';
+      labelEl.style.top = ((1 - position.y) * this.#height) / 2 + 'px';
+      labelEl.style.left = ((1 + position.x) * this.#width) / 2 + 'px';
+    });
   }
 
   /**
    * @description: 开启自动播放
    * @return {*}
    */
-  startAutoplay(activeIndex) {
+  #startAutoplay() {
     const { autoplay } = this.options;
 
-    if (autoplay) {
-      const { index, delay } = autoplay;
-      let idx = activeIndex ?? index ?? 0;
+    this.#pauseAutoplay();
 
-      const loopCb = () => {
-        this.active(idx++ % this.pie.children.length);
-      };
+    if (!autoplay) return;
 
-      // 定时轮询
-      let interval = setInterval(loopCb, delay * 1000);
+    const loopCb = () => {
+      const index = this.#autoplay.activeIndex;
+      const len = this.#pie.children.length;
+      const nextMesh = this.#pie.children[index];
 
-      const unbind = () => {
-        if (interval) {
-          clearInterval(interval);
-          interval = null;
-        }
-      };
-      this.handler.emit('clearInterval');
-      this.handler.once('clearInterval', unbind);
+      if (nextMesh) {
+        this.#active(nextMesh._index);
+      }
 
-      // 初始执行
-      loopCb();
+      this.#autoplay.activeIndex = (index + 1) % len;
+    };
+
+    // 定时轮询
+    let delay = parseFloat(autoplay);
+    delay = isNaN(delay) ? 3000 : clamp(delay, 1000, 10000);
+
+    this.#autoplay.interval = setInterval(loopCb, delay);
+
+    // 初始执行
+    loopCb();
+  }
+
+  /**
+   * @description: 暂停自动播放
+   * @return {*}
+   */
+  #pauseAutoplay() {
+    if (this.#autoplay.interval) {
+      clearInterval(this.#autoplay.interval);
+      this.#autoplay.interval = null;
     }
+
+    if (this.#autoplay.resumeTimeout) {
+      clearTimeout(this.#autoplay.resumeTimeout);
+      this.#autoplay.resumeTimeout = null;
+    }
+  }
+
+  /**
+   * @description: 恢复自动播放
+   * @return {*}
+   */
+  #resumeAutoplay() {
+    this.#autoplay.resumeTimeout = setTimeout(() => {
+      const index = this.#autoplay.activeIndex;
+      const len = this.#pie.children.length;
+      this.#autoplay.activeIndex = (index - 1 + len) % len;
+
+      this.#startAutoplay();
+    }, 200);
   }
 
   /**
    * @description: 停止自动播放
    * @return {*}
    */
-  stopAutoplay() {
-    this.handler.emit('clearInterval');
+  #stopAutoplay() {
+    this.#pauseAutoplay();
+    this.#autoplay.activeIndex = 0;
+  }
+
+  /**
+   * @description: 监听mouseenter
+   * @param {*} index
+   * @return {*}
+   */
+  #onMouseenter(index) {
+    this.#pauseAutoplay();
+    this.#active(index);
+  }
+
+  /**
+   * @description: 监听mouseleave
+   * @return {*}
+   */
+  #onMouseleave() {
+    this.#active(-1);
+    this.#resumeAutoplay();
   }
 
   /**
@@ -481,31 +656,67 @@ class Pie {
    * @param {*} index
    * @return {*}
    */
-  active(index) {
-    if (!this.options.animation) return;
-    const { duration, activeHeight } = this.options.animation;
+  #active(index) {
+    if (!this.options.activeAnimation) return;
 
-    this.pie?.children.forEach((mesh) => {
-      if (!mesh.tw) {
-        mesh.tw = gsap
+    const { duration, heightScale } = this.options.activeAnimation;
+
+    this.#pie?.children.forEach((mesh) => {
+      if (!mesh._tw) {
+        mesh._tw = gsap
           .to(mesh.scale, {
-            z: activeHeight,
+            z: heightScale,
             duration,
-            ease: 'sine.inOut',
+            ease: 'sine.out',
           })
           .pause();
       }
 
       if (mesh._index === index) {
-        mesh.tw.play();
+        mesh._tw.play();
       } else {
-        mesh.tw.reverse();
+        mesh._tw.reverse();
       }
     });
 
-    //     if (typeof activeCallback === 'function') {
-    //       activeCallback(arcs[idx].data, idx);
-    //     }
+    this.#emitter.emit('active', this.#getEventParam(index));
+  }
+
+  /**
+   * @description: 设置图例选中项
+   * @param {*} param
+   * @return {*}
+   */
+  setLegendChecked(param) {
+    if (this.#disposed) return;
+
+    if (isFunction(param)) {
+      this.#legends = param(this.#legends.slice());
+    } else {
+      this.#legends = param;
+    }
+
+    this.#stopAutoplay();
+    this.#buildPie();
+  }
+
+  /**
+   * @description: 激活
+   * @param {*} index
+   * @return {*}
+   */
+  activate(index) {
+    if (this.#disposed) return;
+    this.#onMouseenter(index);
+  }
+
+  /**
+   * @description: 取消激活
+   * @return {*}
+   */
+  deactivate() {
+    if (this.#disposed) return;
+    this.#onMouseleave();
   }
 
   /**
@@ -513,31 +724,82 @@ class Pie {
    * @return {*}
    */
   dispose() {
-    this.stopAutoplay();
+    if (this.#disposed) return;
 
-    this.handler.emit('unbind');
-    this.handler.clear();
+    this.#domEvents.forEach((unbind) => unbind());
+    this.#emitter.all.clear();
+    this.#domEvents = null;
+    this.#emitter = null;
 
-    if (this.scene) {
-      this.scene.clear();
-      this.scene = null;
+    this.#labels.forEach((label) => {
+      this.$el.removeChild(label);
+    });
+
+    this.#stopMakePieAnimate();
+    this.#stopAutoplay();
+
+    if (this.#tracker) {
+      this.#tracker.disposeAll();
+      this.#tracker = null;
     }
 
-    if (this.resMgr) {
-      this.resMgr.dispose();
+    if (this.#scene) {
+      this.#scene.clear();
+      this.#scene = null;
     }
 
-    if (this.renderer) {
-      this.renderer.setAnimationLoop(null);
-      this.renderer.dispose();
-      this.renderer.forceContextLoss();
-      this.renderer.content = null;
-      let gl = this.renderer.domElement.getContext('webgl');
+    if (this.#camera) {
+      this.#camera.clear();
+      this.#camera = null;
+    }
+
+    if (this.#renderer) {
+      this.#renderer.setAnimationLoop(null);
+      this.#renderer.dispose();
+      this.#renderer.forceContextLoss();
+      this.#renderer.content = null;
+      let gl = this.#renderer.domElement.getContext('webgl');
       gl && gl.getExtension('WEBGL_lose_context').loseContext();
-      this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
-      // console.log('dispose renderer.info', this.renderer.info);
-      this.renderer = null;
+      this.#renderer.domElement.parentNode.removeChild(this.#renderer.domElement);
+      this.#renderer = null;
     }
+
+    this.$el = null;
+    this.options = null;
+    this.#raycaster = null;
+    this.#pie = null;
+    this.#legends = null;
+    this.#arcs = null;
+    this.#labels = null;
+    this.#runtimeEvents = null;
+    this.#debounceCompleteCb = null;
+    this.#svgLoader = null;
+    this.#autoplay = null;
+    this.#disposed = true;
+  }
+
+  /**
+   * @description: 获取事件参数
+   * @param {*} index
+   * @return {*}
+   */
+  #getEventParam(index) {
+    let param = null;
+
+    if (index > -1) {
+      const mesh = this.#pie.children.find((v) => v._index === index);
+      const { value } = this.#arcs[index];
+      const total = this.#arcs.reduce((s, a) => s + a.value, 0);
+
+      param = {
+        index,
+        value,
+        percent: total > 0 ? value / total : 0,
+        color: mesh._color,
+      };
+    }
+
+    return param;
   }
 
   /**
@@ -545,7 +807,15 @@ class Pie {
    * @return {*}
    */
   get ratio() {
-    return this.width / this.height;
+    return this.#width / this.#height;
+  }
+
+  /**
+   * @description: debugger getter
+   * @return {*}
+   */
+  get openDebug() {
+    return Boolean(this.options?.debug);
   }
 }
 

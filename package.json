@@ -25,9 +25,9 @@
   "dependencies": {
     "d3-shape": "^3.2.0",
     "gsap": "^3.11.5",
-    "lodash.castarray": "^4.4.0",
-    "lodash.merge": "^4.6.2",
-    "lodash.upperfirst": "^4.3.1",
+    "lodash-es": "^4.17.21",
+    "mitt": "^3.0.1",
+    "piechart-3d": "^2.0.0",
     "three": "^0.150.1"
   },
   "devDependencies": {

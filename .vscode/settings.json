@@ -28,5 +28,7 @@
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": true,
     "source.fixAll.stylelint": true
-  }
+  },
+
+  "cSpell.words": ["raycaster", "wireframe", "gsap", "phong"]
 }

@@ -4,7 +4,8 @@ export default class ResourceTracker {
   constructor() {
     this.resources = new Set();
   }
-  track(resource) {
+
+  add(resource) {
     if (!resource) {
       return resource;
     }
@@ -19,15 +20,31 @@ export default class ResourceTracker {
     if (resource.dispose || resource instanceof THREE.Object3D) {
       this.resources.add(resource);
     }
+
+    return resource;
+  }
+
+  remove(resource) {
+    this.resources.delete(resource);
+  }
+
+  dispose(resource) {
+    if (!resource) return;
+
+    if (Array.isArray(resource)) {
+      resource.forEach((resource) => this.dispose(resource));
+      return;
+    }
+
     if (resource instanceof THREE.Object3D) {
-      this.track(resource.geometry);
-      this.track(resource.material);
-      this.track(resource.children);
+      this.dispose(resource.geometry);
+      this.dispose(resource.material);
+      this.dispose(resource.children);
     } else if (resource instanceof THREE.Material) {
       // We have to check if there are any textures on the material
       for (const value of Object.values(resource)) {
         if (value instanceof THREE.Texture) {
-          this.track(value);
+          this.dispose(value);
         }
       }
       // We also have to check if any uniforms reference textures or arrays of textures
@@ -36,28 +53,28 @@ export default class ResourceTracker {
           if (value) {
             const uniformValue = value.value;
             if (uniformValue instanceof THREE.Texture || Array.isArray(uniformValue)) {
-              this.track(uniformValue);
+              this.dispose(uniformValue);
             }
           }
         }
       }
     }
-    return resource;
-  }
-  untrack(resource) {
-    this.resources.delete(resource);
-  }
-  dispose() {
-    for (const resource of this.resources) {
-      if (resource instanceof THREE.Object3D) {
-        if (resource.parent) {
-          resource.parent.remove(resource);
-        }
-      }
-      if (resource.dispose) {
-        resource.dispose();
-      }
+
+    if (resource instanceof THREE.Object3D && resource.parent) {
+      resource.parent.remove(resource);
     }
+
+    if (resource.dispose) {
+      resource.dispose();
+    }
+
+    if (this.resources.has(resource)) {
+      this.resources.delete(resource);
+    }
+  }
+
+  disposeAll() {
+    this.resources.forEach(this.dispose.bind(this));
     this.resources.clear();
   }
 }
