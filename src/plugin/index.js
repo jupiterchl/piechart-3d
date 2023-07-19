@@ -70,6 +70,12 @@ class Pie {
     this.$el = typeof el === 'string' ? document.querySelector(el) : el;
     this.options = merge({}, defaultOptions, options);
 
+    // 检查定位
+    const style = window.getComputedStyle(this.$el);
+    if (style.position === 'static') {
+      this.$el.style.position = 'relative';
+    }
+
     // 初始化
     this.#init();
   }

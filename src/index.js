@@ -3,12 +3,12 @@ import Pie from './plugin';
 
 function init() {
   const options = {
-    debug: false,
+    debug: true,
     data: [16406.8, 50256, 15752, 19467.6, 112249.6, 18601.6],
-    innerRadius: 0,
+    innerRadius: 60,
     outerRadius: 100,
-    cornerRadius: 0,
-    padAngle: 0,
+    cornerRadius: 2,
+    padAngle: 0.06,
     height: 20,
     activeAnimation: {
       duration: 0.25,
