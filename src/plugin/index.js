@@ -15,11 +15,11 @@ const defaultOptions = {
   debug: false,
 
   data: [], // [5, 2, 3, 4]
-  innerRadius: 0, // 0-1
-  outerRadius: 1, // 0-1
-  cornerRadius: 0, // 0-0.5 (outerRadius-innerRadius)/2
+  innerRadius: 0, // 0-100
+  outerRadius: 100, // 0-100
+  cornerRadius: 0, // 0-50 (outerRadius-innerRadius)/2
   padAngle: 0, // 0-0.1
-  height: 0.2, // 0-0.5
+  height: 20, // 0-50
 
   colors: [
     '#3b82f6', // blue
@@ -85,6 +85,7 @@ class Pie {
   #raycaster = null;
   #domEvents = [];
   #pie = null;
+  #activeIndex = -1;
   #legends = [];
   #arcs = null;
   #labels = [];
@@ -397,13 +398,13 @@ class Pie {
     const group = new THREE.Group();
 
     const extrudeSettings = {
-      curveSegments: 36,
+      curveSegments: 64,
       steps: 2,
       depth: height,
       bevelEnabled: true,
-      bevelThickness: 0.01,
-      bevelSize: 0.005,
-      bevelOffset: 0.0,
+      bevelThickness: 1,
+      bevelSize: 1,
+      bevelOffset: 0,
       bevelSegments: 3,
     };
 
@@ -420,6 +421,8 @@ class Pie {
     });
 
     group.rotation.x -= Math.PI / 2;
+    group.scale.set(0.01, 0.01, 0.01);
+    group.position.set(0, 0, 0);
 
     if (this.#pie) {
       this.#tracker.dispose(this.#pie);
@@ -501,7 +504,7 @@ class Pie {
    * @return {*}
    */
   #updateLabel() {
-    const { label } = this.options;
+    const { height, label } = this.options;
 
     if (!label || !label.show) {
       if (this.#labels.length > 0) {
@@ -518,6 +521,9 @@ class Pie {
       v.style.display = 'none';
     });
 
+    const labelPosition = label.position ?? 0.7;
+    const isCenter = labelPosition === 0;
+
     this.#pie?.children.forEach((mesh) => {
       const index = mesh._index;
       let labelEl = this.#labels[index];
@@ -527,6 +533,7 @@ class Pie {
         node.style.position = 'absolute';
         node.style.top = '0px';
         node.style.left = '0px';
+        node.style.display = 'none';
         node.style.transform = 'translate(-50%, -100%)';
         node.style.pointerEvents = 'none';
 
@@ -540,23 +547,33 @@ class Pie {
         labelEl = this.#labels[index] = node;
       }
 
-      const box = new THREE.Box3().setFromObject(mesh);
-      const vector3 = new THREE.Vector3();
-      const size = box.getSize(vector3);
-      // track box
+      if (isCenter) {
+        if (index === this.#activeIndex) {
+          const vector = new THREE.Vector3(0, height / 100, 0);
+          const position = vector.project(this.#camera);
 
-      const { startAngle, endAngle } = this.#arcs[index];
-      const theta = (startAngle + endAngle) / 2 - Math.PI / 2;
-      const labelPosition = label.position ?? 0.7;
-      const xOffset = Math.cos(theta) * labelPosition;
-      const zOffset = -Math.sin(theta) * labelPosition;
-      const vector = new THREE.Vector3(xOffset, size.y, zOffset);
-      const position = vector.project(this.#camera);
+          labelEl.style.display = 'flex';
+          labelEl.style.top = ((1 - position.y) * this.#height) / 2 + 'px';
+          labelEl.style.left = ((1 + position.x) * this.#width) / 2 + 'px';
+        }
+      } else {
+        const box = new THREE.Box3().setFromObject(mesh);
+        const vector3 = new THREE.Vector3();
+        const size = box.getSize(vector3);
+        // track box
 
-      labelEl.style.zIndex = Math.floor((1 - position.y) * 10000);
-      labelEl.style.display = 'flex';
-      labelEl.style.top = ((1 - position.y) * this.#height) / 2 + 'px';
-      labelEl.style.left = ((1 + position.x) * this.#width) / 2 + 'px';
+        const { startAngle, endAngle } = this.#arcs[index];
+        const theta = (startAngle + endAngle) / 2 - Math.PI / 2;
+        const xOffset = Math.cos(theta) * labelPosition;
+        const zOffset = -Math.sin(theta) * labelPosition;
+        const vector = new THREE.Vector3(xOffset, size.y, zOffset);
+        const position = vector.project(this.#camera);
+
+        labelEl.style.zIndex = index === this.#activeIndex ? 99999 : Math.floor((1 - position.y) * 10000);
+        labelEl.style.display = 'flex';
+        labelEl.style.top = ((1 - position.y) * this.#height) / 2 + 'px';
+        labelEl.style.left = ((1 + position.x) * this.#width) / 2 + 'px';
+      }
     });
   }
 
@@ -585,7 +602,7 @@ class Pie {
 
     // 定时轮询
     let delay = parseFloat(autoplay);
-    delay = isNaN(delay) ? 3000 : clamp(delay, 1000, 10000);
+    delay = isNaN(delay) ? 3000 : clamp(delay * 1000, 1000, 10000);
 
     this.#autoplay.interval = setInterval(loopCb, delay);
 
@@ -679,6 +696,8 @@ class Pie {
       }
     });
 
+    this.#activeIndex = index;
+
     this.#emitter.emit('active', this.#getEventParam(index));
   }
 
@@ -768,6 +787,7 @@ class Pie {
     this.options = null;
     this.#raycaster = null;
     this.#pie = null;
+    this.#activeIndex = -1;
     this.#legends = null;
     this.#arcs = null;
     this.#labels = null;

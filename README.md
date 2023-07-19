@@ -18,21 +18,37 @@ yarn add piechart-3d
 import Pie from 'piechart-3d';
 
 const options = {
-  data: [38, 40, 28, 5],
+  debug: false,
+  data: [16406.8, 50256, 15752, 19467.6, 112249.6, 18601.6],
   innerRadius: 0,
-  outerRadius: 150,
+  outerRadius: 100,
   cornerRadius: 0,
   padAngle: 0,
-  height: 40,
-  animation: {
-    delay: 2,
-    duration: 0.75,
-    activeHeight: 1.5,
+  height: 20,
+  activeAnimation: {
+    duration: 0.25,
+    heightScale: 2,
   },
-  light: {
-    ambientLight: {
-      color: '#fff',
-      intensity: 0.3,
+  label: {
+    show: true,
+    position: 0.75,
+    render({ percent, color }) {
+      const div = document.createElement('div');
+      div.innerText = Number((percent * 100).toFixed(2)) + '%';
+      div.style.background = color;
+      return div;
+    },
+  },
+  autoplay: false,
+  on: {
+    mouseenter(e) {
+      console.log('mouseenter', e);
+    },
+    mouseleave(e) {
+      console.log('mouseleave', e);
+    },
+    active(e) {
+      console.log('active', e);
     },
   },
 };
@@ -45,20 +61,21 @@ pie.dispose();
 
 ### 配置项
 
-| 属性           | 类型     | 默认值   | 描述             |
-| -------------- | -------- | -------- | ---------------- |
-| debug          | Boolean  | false    | 是否开启调试模式 |
-| data           | Array    | []       | 数据源           |
-| parseValue     | Function | (v) => v | 数据源取值方法   |
-| innerRadius    | Number   | 0        | 饼图内径         |
-| outerRadius    | Number   | 100      | 饼图外径         |
-| cornerRadius   | Number   | 0        | 饼图圆角         |
-| padAngle       | Number   | 0        | 饼图间隔         |
-| height         | Number   | 40       | 饼图高度         |
-| colors         | Array    | \*见备注 | 饼图色板         |
-| light          | Object   | \*见备注 | 饼图灯光         |
-| animation      | Object   | \*见备注 | 饼图动效         |
-| activeCallback | Function | null     | 激活项回调       |
+| 属性            | 类型            | 默认值   | 描述             |
+| --------------- | --------------- | -------- | ---------------- |
+| debug           | Boolean         | false    | 是否开启调试模式 |
+| data            | Array           | []       | 数据源           |
+| innerRadius     | Number          | 0        | 饼图内径，0-100  |
+| outerRadius     | Number          | 100      | 饼图外径，0-100  |
+| cornerRadius    | Number          | 0        | 饼图圆角，0-50   |
+| padAngle        | Number          | 0        | 饼图间隔，0-0.1  |
+| height          | Number          | 20       | 饼图高度，0-50   |
+| colors          | Array           | \*见备注 | 饼图色板         |
+| lights          | Array           | \*见备注 | 饼图灯光         |
+| label           | Object          | \*见备注 | 饼图标签         |
+| activeAnimation | Object          | \*见备注 | 饼图动效         |
+| autoplay        | Boolean\|Number | false    | 自动播放         |
+| on              | Object          | \*见备注 | 监听事件         |
 
 ### 备注
 
@@ -86,51 +103,109 @@ pie.dispose();
 ];
 ```
 
-#### `light`默认值
+#### `lights`默认值
 
 ```js
-{
-  ambientLight: {
+[
+  {
+    type: 'ambientLight',
     color: '#fff',
     intensity: 0.3,
   },
-  spotLight: {
-    color: '#fff',  // 颜色
-    intensity: 1, // 强度
-    position: [5, 5, 5],  // 位置
+  {
+    type: 'spotLight',
+    color: '#fff',
+    intensity: 1,
+    position: [5, 5, 5],
   },
-}
+];
 ```
 
 支持`ambientLight`、`pointLight`、`spotLight`、`directionalLight`等灯光效果，每种灯光支持配置属性有`color`、`intensity`、`position`。
 
-如果有多个同类灯光，使用数组配置即可，如下所示：
+#### `label`配置
+
+饼图标签项配置，默认值如下：
 
 ```js
 {
-  spotLight: [
-    {
-      color: '#fff',
-      intensity: 0.5,
-      position: [5, 5, 5],
-    },
-    {
-      color: '#fff',
-      intensity: 0.75,
-      position: [-5, 5, 5],
-    },
-  ],
+  show: false, // 是否显示
+  position: 0.7, // 标签显示位置占比。注意，如果值为`0`，则为中心展示，此时只显示激活项标签
+  render: null, // 标签渲染函数，参数同事件参数，返回值为`dom`元素
 }
 ```
 
-#### `animation`配置
+#### `activeAnimation`配置
 
 默认不开启动效，如果该项配置存在，则开启动效。
 
 ```js
 {
-  delay: 2, // 切换间隔
   duration: 0.75, // 动效时长
-  activeHeight: 1.5,  // 激活块高度比值，如默认高度的1.5倍
+  heightScale: 2,  // 激活块高度缩放，如默认高度的2倍
 }
 ```
+
+#### `autoplay`配置
+
+默认值为`false`，不开启自动播放。该项值接受布尔值和数值，如果需要开启自动播放，可设置为`true`或具体数值，单位秒。如果为`true`，则为`3s`，如果为数值，则取值在`1-10`之间。
+
+#### `on`配置
+
+默认值为`null`，如果需要监听事件，可进行相应配置，配置示例如下：
+
+```js
+{
+  mouseenter(e) {
+    console.log('mouseenter', e);
+  },
+  mouseleave(e) {
+    console.log('mouseleave', e);
+  },
+  active(e) {
+    console.log('active', e);
+  },
+}
+```
+
+#### 事件参数
+
+事件参数非原生事件参数，封装值如下：
+
+```js
+{
+  index,  // 触发项序号
+  value,  // 触发项值
+  percent, // 触发项占比（0-1）
+  color, // 触发项色值
+}
+```
+
+### 实例方法
+
+#### `setLegendChecked`
+
+为了实现图例的自定义，图例需自行实现，该方法提供图例与饼图的控制交互。
+
+该方法参数为回调函数，该回调函数的参数为数据等长的数组，示例如下：
+
+```js
+[true, true, true];
+```
+
+每一项对应饼图的对应块，通过布尔值可以控制对应块的显示与隐藏。该回调函数的返回值应为等长的布尔值数组。使用示例如下：
+
+```js
+pie.setLegendChecked((legends) => {
+  legends[index] = checked;
+  return legends;
+});
+```
+
+#### `activate`和`deactivate`
+
+这两个方法用于触发饼图的激活和取消激活。`activate`方法接受一个数值参数，该数值为对应激活块的序号。`deactivate`方法无参数。
+
+#### `dispose`
+
+该方法用于销毁实例，当组件卸载的时候需手动调用。

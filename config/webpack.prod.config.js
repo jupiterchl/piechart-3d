@@ -8,7 +8,7 @@ const TerserPlugin = require('terser-webpack-plugin');
 
 const webpackProdConfig = {
   mode: 'production',
-  target: ['web', 'es6'],
+  target: ['web', 'es2020'],
   entry: {
     pieChart3d: './src/plugin/index.js',
   },
@@ -43,13 +43,13 @@ const webpackProdConfig = {
     minimizer: [new TerserPlugin({ extractComments: false }), new CssMinimizerWebpackPlugin()],
   },
   externals: [
-    // {
-    //   three: true,
-    //   gsap: true,
-    //   'd3-shape': true,
-    //   mitt: true,
-    // },
-    // /^lodash/,
+    {
+      three: true,
+      gsap: true,
+      'd3-shape': true,
+      mitt: true,
+    },
+    /^lodash/,
   ],
   plugins: [new CleanWebpackPlugin(), new MiniCssExtractPlugin()],
 };

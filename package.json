@@ -1,6 +1,6 @@
 {
   "name": "piechart-3d",
-  "version": "2.0.0",
+  "version": "3.0.1",
   "description": "3d饼状图图表",
   "keywords": [
     "pie",
@@ -27,7 +27,6 @@
     "gsap": "^3.11.5",
     "lodash-es": "^4.17.21",
     "mitt": "^3.0.1",
-    "piechart-3d": "^2.0.0",
     "three": "^0.150.1"
   },
   "devDependencies": {

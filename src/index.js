@@ -1,23 +1,22 @@
 import './index.scss';
 import Pie from './plugin';
-// import Pie from '../es/pieChart3d.js';
 
 function init() {
   const options = {
     debug: false,
-    data: Array.from({ length: 6 }, () => Math.floor(Math.random() * 100)),
-    innerRadius: 0.7,
-    outerRadius: 1,
+    data: [16406.8, 50256, 15752, 19467.6, 112249.6, 18601.6],
+    innerRadius: 0,
+    outerRadius: 100,
     cornerRadius: 0,
     padAngle: 0,
-    height: 0.2,
+    height: 20,
     activeAnimation: {
       duration: 0.25,
       heightScale: 2,
     },
     label: {
-      show: false,
-      position: 0.85,
+      show: true,
+      position: 0.75,
       render({ percent, color }) {
         const div = document.createElement('div');
         div.innerText = Number((percent * 100).toFixed(2)) + '%';
@@ -25,17 +24,7 @@ function init() {
         return div;
       },
     },
-    autoplay: true,
-    // autoplay: {
-    //   index: 0,
-    //   delay: 2,
-    // },
-    // light: {
-    //   ambientLight: {
-    //     color: '#fff',
-    //     intensity: 0.3,
-    //   },
-    // },
+    autoplay: 2,
     on: {
       mouseenter(e) {
         console.log('mouseenter', e);
@@ -51,7 +40,9 @@ function init() {
 
   let pie = null;
 
-  // pie = new Pie('.chart', options);
+  pie = new Pie('.chart', options);
+
+  console.log('pie', pie);
 
   document.getElementById('mount').addEventListener(
     'click',
@@ -105,30 +96,6 @@ function init() {
   //   el.addEventListener('mouseenter', legendHandler, false);
   //   el.addEventListener('mouseleave', legendHandler, false);
   // });
-}
-
-function randomCfg() {
-  const genData = function () {
-    return Array.from({ length: 10 }, (v, i) => ({
-      label: `${i + 1}类物品`,
-      value: ~~(Math.random() * 100) + 20,
-    }));
-  };
-
-  const cfg = {
-    radius: [~~(Math.random() * 100), ~~(Math.random() * 80) + 120], // 半径：[内径, 外径]
-    tilt: ~~(Math.random() * 30) + 30, // 倾角
-    height: ~~(Math.random() * 50) + 50, // 高度
-    colors: ['#0896FF', '#0FC7FF', '#4EF7E7', '#2FEEC8', '#FFB632', '#FF8C3F', '#3FEC9B'], // 颜色
-    data: genData(), // 数据
-    textNode(d) {
-      const p = document.createElement('p');
-      p.innerText = Math.round(d.realtimeValue);
-      return p;
-    },
-  };
-
-  return cfg;
 }
 
 init();
