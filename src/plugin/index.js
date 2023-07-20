@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import gsap from 'gsap';
 import { arc, pie } from 'd3-shape';
-import { merge, clamp, upperFirst, isFunction, debounce } from 'lodash-es';
+import { clamp, isFunction, debounce } from 'lodash-es';
 import mitt from 'mitt';
 import ResourceTracker from './libs/ResourceTracker';
 
@@ -21,6 +21,7 @@ const defaultOptions = {
   padAngle: 0, // 0-0.1
   height: 20, // 0-50
 
+  viewport: [0, 2, 3],
   colors: [
     '#3b82f6', // blue
     '#f43f5e', // rose
@@ -42,12 +43,12 @@ const defaultOptions = {
   ],
   lights: [
     {
-      type: 'ambientLight',
+      type: 'AmbientLight',
       color: '#fff',
       intensity: 0.3,
     },
     {
-      type: 'spotLight',
+      type: 'SpotLight',
       color: '#fff',
       intensity: 1,
       position: [5, 5, 5],
@@ -68,7 +69,7 @@ const defaultOptions = {
 class Pie {
   constructor(el, options) {
     this.$el = typeof el === 'string' ? document.querySelector(el) : el;
-    this.options = merge({}, defaultOptions, options);
+    this.options = { ...defaultOptions, ...options };
 
     // 检查定位
     const style = window.getComputedStyle(this.$el);
@@ -88,6 +89,7 @@ class Pie {
   #renderer = null;
   #scene = null;
   #camera = null;
+  #controls = null;
   #raycaster = null;
   #domEvents = [];
   #pie = null;
@@ -115,7 +117,10 @@ class Pie {
     this.#initData();
     this.#initEvent();
     this.#initFrame();
-    this.#buildPie();
+
+    if (this.options.data.length) {
+      this.#buildPie();
+    }
   }
 
   /**
@@ -191,10 +196,12 @@ class Pie {
     // scene.background = new THREE.Color(0xf0f0f0);
 
     const camera = new THREE.PerspectiveCamera(50, this.ratio, 0.1, 100);
-    camera.position.set(0, 2, 3);
+    camera.position.set(...this.options.viewport);
     camera.lookAt(0, 0, 0);
 
     const animation = (time) => {
+      this.#controls?.update();
+
       renderer.render(scene, camera);
 
       // 更新标签
@@ -245,6 +252,8 @@ class Pie {
     controls.enableDamping = true;
     controls.dampingFactor = 0.25;
     controls.rotateSpeed = 0.35;
+    this.#controls = controls;
+    this.#tracker.add(controls);
   }
 
   /**
@@ -255,14 +264,14 @@ class Pie {
     const { lights } = this.options;
 
     lights.forEach((option) => {
-      const type = upperFirst(option.type);
+      const type = option.type;
 
       if (!THREE[type]) return;
 
       const { color, intensity, position } = option;
       let light = new THREE[type](color, intensity);
 
-      if (position) {
+      if (type !== 'AmbientLight' && position) {
         light.position.set(...position);
       }
 
@@ -510,7 +519,7 @@ class Pie {
    * @return {*}
    */
   #updateLabel() {
-    const { height, label } = this.options;
+    const { innerRadius, height, label } = this.options;
 
     if (!label || !label.show) {
       if (this.#labels.length > 0) {
@@ -528,6 +537,7 @@ class Pie {
     });
 
     const labelPosition = label.position ?? 0.7;
+    const isDonut = innerRadius > 0;
     const isCenter = labelPosition === 0;
 
     this.#pie?.children.forEach((mesh) => {
@@ -555,7 +565,7 @@ class Pie {
 
       if (isCenter) {
         if (index === this.#activeIndex) {
-          const vector = new THREE.Vector3(0, height / 100, 0);
+          const vector = new THREE.Vector3(0, isDonut ? 0 : height / 100, 0);
           const position = vector.project(this.#camera);
 
           labelEl.style.display = 'flex';
@@ -791,6 +801,7 @@ class Pie {
 
     this.$el = null;
     this.options = null;
+    this.#controls = null;
     this.#raycaster = null;
     this.#pie = null;
     this.#activeIndex = -1;

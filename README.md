@@ -70,6 +70,7 @@ pie.dispose();
 | cornerRadius    | Number          | 0        | 饼图圆角，0-50   |
 | padAngle        | Number          | 0        | 饼图间隔，0-0.1  |
 | height          | Number          | 20       | 饼图高度，0-50   |
+| viewport        | Array           | [0,2,3]  | 摄像机位置       |
 | colors          | Array           | \*见备注 | 饼图色板         |
 | lights          | Array           | \*见备注 | 饼图灯光         |
 | label           | Object          | \*见备注 | 饼图标签         |
@@ -108,12 +109,12 @@ pie.dispose();
 ```js
 [
   {
-    type: 'ambientLight',
+    type: 'AmbientLight',
     color: '#fff',
     intensity: 0.3,
   },
   {
-    type: 'spotLight',
+    type: 'SpotLight',
     color: '#fff',
     intensity: 1,
     position: [5, 5, 5],
@@ -121,7 +122,7 @@ pie.dispose();
 ];
 ```
 
-支持`ambientLight`、`pointLight`、`spotLight`、`directionalLight`等灯光效果，每种灯光支持配置属性有`color`、`intensity`、`position`。
+支持`AmbientLight`、`PointLight`、`SpotLight`、`DirectionalLight`等灯光效果，每种灯光支持配置属性有`color`、`intensity`、`position`。
 
 #### `label`配置
 

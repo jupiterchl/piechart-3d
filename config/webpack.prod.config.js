@@ -8,7 +8,6 @@ const TerserPlugin = require('terser-webpack-plugin');
 
 const webpackProdConfig = {
   mode: 'production',
-  target: ['web', 'es2020'],
   entry: {
     pieChart3d: './src/plugin/index.js',
   },
@@ -17,10 +16,11 @@ const webpackProdConfig = {
     publicPath: '/es/',
     filename: '[name].js',
     library: {
-      name: '[name]',
-      type: 'umd',
-      umdNamedDefine: true,
+      type: 'module',
     },
+  },
+  experiments: {
+    outputModule: true,
   },
   module: {
     rules: [

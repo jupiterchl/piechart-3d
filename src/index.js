@@ -1,5 +1,6 @@
 import './index.scss';
 import Pie from './plugin';
+// import Pie from '../es/pieChart3d';
 
 function init() {
   const options = {
