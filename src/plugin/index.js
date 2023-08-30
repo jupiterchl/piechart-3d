@@ -20,6 +20,7 @@ const defaultOptions = {
   cornerRadius: 0, // 0-50 (outerRadius-innerRadius)/2
   padAngle: 0, // 0-0.1
   height: 20, // 0-50
+  scale: 1,
 
   viewport: [0, 2, 3],
   colors: [
@@ -408,7 +409,7 @@ class Pie {
   #genPie(data, arcs) {
     if (this.#disposed) return;
 
-    const { height, colors } = this.options;
+    const { height, scale, colors } = this.options;
     const shapes = data.paths.map((v) => v.toShapes()).flat();
     const group = new THREE.Group();
 
@@ -436,7 +437,7 @@ class Pie {
     });
 
     group.rotation.x -= Math.PI / 2;
-    group.scale.set(0.01, 0.01, 0.01);
+    group.scale.set(...Array.from({ length: 3 }, () => 0.01 * scale));
     group.position.set(0, 0, 0);
 
     if (this.#pie) {

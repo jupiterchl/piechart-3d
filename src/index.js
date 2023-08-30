@@ -11,6 +11,7 @@ function init() {
     cornerRadius: 2,
     padAngle: 0.06,
     height: 20,
+    scale: 1,
     activeAnimation: {
       duration: 0.25,
       heightScale: 2,
