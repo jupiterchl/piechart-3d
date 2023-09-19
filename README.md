@@ -70,6 +70,7 @@ pie.dispose();
 | cornerRadius    | Number          | 0        | 饼图圆角，0-50   |
 | padAngle        | Number          | 0        | 饼图间隔，0-0.1  |
 | height          | Number          | 20       | 饼图高度，0-50   |
+| scale           | Number          | 1        | 饼图缩放         |
 | viewport        | Array           | [0,2,3]  | 摄像机位置       |
 | colors          | Array           | \*见备注 | 饼图色板         |
 | lights          | Array           | \*见备注 | 饼图灯光         |
