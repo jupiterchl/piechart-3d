@@ -42,6 +42,7 @@ const defaultOptions = {
     '#f59e0b', // amber
     '#ef4444', // red
   ],
+  emptyColor: '#aaa',
   lights: [
     {
       type: 'AmbientLight',
@@ -94,6 +95,7 @@ class Pie {
   #raycaster = null;
   #domEvents = [];
   #pie = null;
+  #isEmpty = false;
   #activeIndex = -1;
   #legends = [];
   #arcs = null;
@@ -119,9 +121,7 @@ class Pie {
     this.#initEvent();
     this.#initFrame();
 
-    if (this.options.data.length) {
-      this.#buildPie();
-    }
+    this.#buildPie();
   }
 
   /**
@@ -314,7 +314,13 @@ class Pie {
       );
     };
 
-    const _data = data.map((v, i) => (this.#legends[i] ? v : 0));
+    let _data = data?.length > 0 ? data.map((v, i) => (this.#checkAvailable(i) ? v : 0)) : [];
+    this.#isEmpty = false;
+
+    if (_data.length === 0 || _data.every((v) => v === 0)) {
+      _data = [1];
+      this.#isEmpty = true;
+    }
 
     this.#makePie(_data, update);
   }
@@ -343,8 +349,10 @@ class Pie {
     let endArray = arcs.map((v) => v.endAngle - v.startAngle);
 
     if (this.#arcs) {
-      curArray = this.#arcs.map((v) => v.endAngle - v.startAngle);
-      endArray = arcs.map((v) => v.endAngle - v.startAngle);
+      curArray = curArray.map((v, i) => {
+        const arc = this.#arcs[i];
+        return arc ? arc.endAngle - arc.startAngle : v;
+      });
     }
 
     const onUpdate = () => {
@@ -409,7 +417,7 @@ class Pie {
   #genPie(data, arcs) {
     if (this.#disposed) return;
 
-    const { height, scale, colors } = this.options;
+    const { height, scale, colors, emptyColor } = this.options;
     const shapes = data.paths.map((v) => v.toShapes()).flat();
     const group = new THREE.Group();
 
@@ -425,15 +433,13 @@ class Pie {
     };
 
     shapes.forEach((shape, i) => {
-      if (arcs[i].startAngle !== arcs[i].endAngle) {
-        const color = colors[i % colors.length];
-        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        const material = new THREE.MeshPhongMaterial({ color, wireframe: false });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh._index = i; // 标记序号
-        mesh._color = color; // 标记颜色
-        group.add(mesh);
-      }
+      const color = !this.#isEmpty ? colors[i % colors.length] : emptyColor;
+      const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+      const material = new THREE.MeshPhongMaterial({ color, wireframe: false });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh._index = i; // 标记序号
+      mesh._color = color; // 标记颜色
+      group.add(mesh);
     });
 
     group.rotation.x -= Math.PI / 2;
@@ -522,7 +528,7 @@ class Pie {
   #updateLabel() {
     const { innerRadius, height, label } = this.options;
 
-    if (!label || !label.show) {
+    if (!label || !label.show || this.#isEmpty) {
       if (this.#labels.length > 0) {
         this.#labels.forEach((v) => {
           this.$el.removeChild(v);
@@ -554,14 +560,16 @@ class Pie {
         node.style.transform = 'translate(-50%, -100%)';
         node.style.pointerEvents = 'none';
 
-        if (isFunction(label.render)) {
-          const el = label.render(this.#getEventParam(index));
-          node.appendChild(el);
-        }
-
         this.$el.appendChild(node);
 
         labelEl = this.#labels[index] = node;
+      }
+
+      // 更新label内容（频繁更新DOM，待优化）
+      if (isFunction(label.render)) {
+        const el = label.render(this.#getEventParam(index));
+        labelEl.innerHTML = '';
+        labelEl.appendChild(el);
       }
 
       if (isCenter) {
@@ -587,9 +595,12 @@ class Pie {
         const position = vector.project(this.#camera);
 
         labelEl.style.zIndex = index === this.#activeIndex ? 99999 : Math.floor((1 - position.y) * 10000);
-        labelEl.style.display = 'flex';
         labelEl.style.top = ((1 - position.y) * this.#height) / 2 + 'px';
         labelEl.style.left = ((1 + position.x) * this.#width) / 2 + 'px';
+
+        if (this.#checkAvailable(index)) {
+          labelEl.style.display = 'flex';
+        }
       }
     });
   }
@@ -603,18 +614,33 @@ class Pie {
 
     this.#pauseAutoplay();
 
-    if (!autoplay) return;
+    if (!autoplay || this.#isEmpty) return;
 
+    // 添加可用性校验
+    let retryTimes = -1;
     const loopCb = () => {
       const index = this.#autoplay.activeIndex;
       const len = this.#pie.children.length;
       const nextMesh = this.#pie.children[index];
 
-      if (nextMesh) {
-        this.#active(nextMesh._index);
-      }
-
       this.#autoplay.activeIndex = (index + 1) % len;
+
+      if (this.#checkAvailable(index)) {
+        if (nextMesh) {
+          this.#active(nextMesh._index);
+        }
+        retryTimes = -1;
+      } else {
+        if (retryTimes === -1) {
+          retryTimes = len - 1;
+        }
+        if (retryTimes > 0) {
+          retryTimes -= 1;
+          loopCb();
+        } else {
+          retryTimes = -1;
+        }
+      }
     };
 
     // 定时轮询
@@ -691,7 +717,7 @@ class Pie {
    * @return {*}
    */
   #active(index) {
-    if (!this.options.activeAnimation) return;
+    if (!this.options.activeAnimation || this.#isEmpty) return;
 
     const { duration, heightScale } = this.options.activeAnimation;
 
@@ -734,6 +760,15 @@ class Pie {
 
     this.#stopAutoplay();
     this.#buildPie();
+  }
+
+  /**
+   * @description: 检查可用性
+   * @param {*} index
+   * @return {*}
+   */
+  #checkAvailable(index) {
+    return this.#legends[index];
   }
 
   /**
@@ -805,6 +840,7 @@ class Pie {
     this.#controls = null;
     this.#raycaster = null;
     this.#pie = null;
+    this.#isEmpty = false;
     this.#activeIndex = -1;
     this.#legends = null;
     this.#arcs = null;

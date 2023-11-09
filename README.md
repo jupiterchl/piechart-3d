@@ -73,6 +73,7 @@ pie.dispose();
 | scale           | Number          | 1        | 饼图缩放         |
 | viewport        | Array           | [0,2,3]  | 摄像机位置       |
 | colors          | Array           | \*见备注 | 饼图色板         |
+| emptyColor      | String          | #aaa     | 饼图空状态颜色   |
 | lights          | Array           | \*见备注 | 饼图灯光         |
 | label           | Object          | \*见备注 | 饼图标签         |
 | activeAnimation | Object          | \*见备注 | 饼图动效         |

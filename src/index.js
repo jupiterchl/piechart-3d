@@ -5,11 +5,11 @@ import Pie from './plugin';
 function init() {
   const options = {
     debug: true,
-    data: [16406.8, 50256, 15752, 19467.6, 112249.6, 18601.6],
+    data: [0.1, 0.2, 0, 0, 0],
     innerRadius: 60,
     outerRadius: 100,
-    cornerRadius: 2,
-    padAngle: 0.06,
+    cornerRadius: 0,
+    padAngle: 0,
     height: 20,
     scale: 1,
     activeAnimation: {
