@@ -741,7 +741,9 @@ class Pie {
 
     this.#activeIndex = index;
 
-    this.#emitter.emit('active', this.#getEventParam(index));
+    if (index !== -1) {
+      this.#emitter.emit('active', this.#getEventParam(index));
+    }
   }
 
   /**
