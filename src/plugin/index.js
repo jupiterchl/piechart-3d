@@ -174,6 +174,34 @@ const MODERN_LIGHTS = [
   },
 ];
 
+// 轮廓重合点的判定阈值（平方距离）
+const CONTOUR_EPSILON_SQ = 1e-12;
+
+/**
+ * @description: 把轮廓展开成去掉重合点的折线
+ * d3 把圆角弧和主弧输出成两条独立曲线，相切处的两个端点只差浮点末位，
+ * Path.getPoints 按精确相等去重，去不掉这个重合点；挤出倒角在该顶点做斜接时
+ * 要除以接近零的边长，算出半径异常的尖刺顶点和错误法线，侧面就会留下一条
+ * 贯穿高度的竖线。这里按挤出用到的细分提前展开并去重。
+ * 必须在 ShapePath.toShapes() 之后再调用：换成折线会让 toShapes 的孔洞判定
+ * 从几条曲线膨胀到上千条，环形图会明显卡顿。
+ * @param {THREE.Path} path 轮廓或孔洞
+ * @param {Number} divisions 每段曲线的细分份数，需与挤出参数 curveSegments 一致
+ * @return {*}
+ */
+const simplifyPath = (path, divisions) => {
+  const points = path.getPoints(divisions).filter(
+    (point, index, list) => index === 0 || point.distanceToSquared(list[index - 1]) > CONTOUR_EPSILON_SQ
+  );
+  // 首尾重合的闭合点由挤出自带的环绕处理收口，保留会重新引入零长度边
+  if (points.length > 1 && points[points.length - 1].distanceToSquared(points[0]) <= CONTOUR_EPSILON_SQ) {
+    points.pop();
+  }
+  path.curves = [];
+  path.currentPoint.copy(points[0]);
+  points.slice(1).forEach((point) => path.lineTo(point.x, point.y));
+};
+
 const defaultOptions = {
   debug: false,
 
@@ -963,6 +991,9 @@ class Pie {
       const labelKey = `${index}|${name ?? ''}|${arcData.value}|${total}|${color}`;
 
       shapePath.toShapes().forEach((shape) => {
+        // 挤出前把轮廓展开成去掉重合点的折线，避免倒角斜接在相切处失效
+        simplifyPath(shape, extrudeSettings.curveSegments);
+        shape.holes.forEach((hole) => simplifyPath(hole, extrudeSettings.curveSegments));
         const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
         geometry.computeBoundingBox();
         const material =
