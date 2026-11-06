@@ -1,11 +1,19 @@
 {
   "name": "piechart-3d",
-  "version": "3.3.1",
-  "description": "3d饼状图图表",
+  "version": "4.0.0",
+  "description": "基于 three.js 的 3D 饼图，支持原生、Vue 2 与 Vue 3",
   "keywords": [
     "pie",
+    "pie-chart",
     "3d",
-    "piechart"
+    "3d-chart",
+    "chart",
+    "three",
+    "threejs",
+    "vue",
+    "vue2",
+    "vue3",
+    "d3"
   ],
   "author": "jupiterchl",
   "license": "MIT",
@@ -20,14 +28,15 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development webpack-dev-server --progress --config config/webpack.dev.config.js",
     "build": "cross-env NODE_ENV=production webpack --progress --config config/webpack.prod.config.js",
-    "build:a": "cross-env NODE_ENV=production webpack --progress --config config/webpack.prod.config.js --analyze"
+    "build:a": "cross-env NODE_ENV=production webpack --progress --config config/webpack.prod.config.js --analyze",
+    "build:demo": "cross-env NODE_ENV=production webpack --progress --config config/webpack.demo.config.js"
   },
   "dependencies": {
     "d3-shape": "^3.2.0",
     "gsap": "^3.11.5",
     "lodash-es": "^4.17.21",
     "mitt": "^3.0.1",
-    "three": "^0.150.1"
+    "three": "0.150.1"
   },
   "devDependencies": {
     "@babel/core": "^7.16.0",
@@ -43,6 +52,7 @@
     "cz-conventional-changelog": "^3.3.0",
     "eslint": "^8.2.0",
     "eslint-config-custom-chl": "^1.0.0",
+    "highlight.js": "^11.9.0",
     "mini-css-extract-plugin": "^2.4.6",
     "postcss": "^8.4.8",
     "postcss-html": "^1.3.0",
@@ -50,14 +60,26 @@
     "prettier": "^2.4.1",
     "sass": "^1.63.6",
     "sass-loader": "^12.4.0",
+    "sortablejs": "^1.15.7",
     "style-loader": "^3.3.1",
     "stylelint": "^14.1.0",
     "stylelint-config-custom-chl": "^1.1.0",
+    "tweakpane": "^4.0.5",
+    "vue": "2.7.16",
+    "vue3": "npm:vue@3.5.44",
     "webpack": "^5.65.0",
     "webpack-bundle-analyzer": "^4.5.0",
     "webpack-cli": "^4.9.1",
     "webpack-dev-server": "^4.7.3",
     "webpack-merge": "^5.8.0"
+  },
+  "peerDependencies": {
+    "vue": "^2.7.0 || ^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vue": {
+      "optional": true
+    }
   },
   "config": {
     "commitizen": {
@@ -65,10 +87,11 @@
     }
   },
   "repository": {
-    "type": "https",
-    "url": "https://gitee.com/happychl/pie-chart-3d.git"
+    "type": "git",
+    "url": "git+https://github.com/jupiterchl/piechart-3d.git"
   },
   "bugs": {
-    "url": "https://gitee.com/happychl/pie-chart-3d/issues"
-  }
+    "url": "https://github.com/jupiterchl/piechart-3d/issues"
+  },
+  "homepage": "https://github.com/jupiterchl/piechart-3d#readme"
 }

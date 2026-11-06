@@ -1,45 +1,72 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <title>3D饼图</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>3D 饼图示例</title>
+    <!-- 相对路径，兼容 GitHub Pages 的 /<repo>/ 子路径 -->
+    <link rel="icon" type="image/png" href="./favicon.png" />
   </head>
   <body>
-    <div id="app">
-      <!-- 图标节点 -->
-      <div class="chart"></div>
+    <div class="layout">
+      <!-- 左侧：原生示例 + Vue 2 / Vue 3 示例 -->
+      <main class="stage">
+        <section class="demo-card demo-card--wide">
+          <header class="demo-card__title">
+            <span>原生调用</span>
+            <button type="button" class="demo-card__code" data-example="native">示例代码</button>
+          </header>
+          <div id="native-chart" class="chart-mount"></div>
+        </section>
 
-      <!-- 图例 -->
-      <fieldset id="legend">
-        <legend>图例</legend>
-        <div data-idx="1">
-          <input type="checkbox" id="p1" name="p1" checked />
-          <label for="p1">项目一</label>
-        </div>
-        <div data-idx="2">
-          <input type="checkbox" id="p2" name="p2" checked />
-          <label for="p2">项目二</label>
-        </div>
-        <div data-idx="3">
-          <input type="checkbox" id="p3" name="p3" checked />
-          <label for="p3">项目三</label>
-        </div>
-        <div data-idx="4">
-          <input type="checkbox" id="p4" name="p4" checked />
-          <label for="p4">项目四</label>
-        </div>
-        <div data-idx="5">
-          <input type="checkbox" id="p5" name="p5" checked />
-          <label for="p5">项目五</label>
-        </div>
-      </fieldset>
+        <section class="demo-card">
+          <header class="demo-card__title">
+            <span>Vue 2 组件</span>
+            <button type="button" class="demo-card__code" data-example="vue2">示例代码</button>
+          </header>
+          <div class="chart-mount">
+            <!-- Vue 2 挂载后会替换该节点 -->
+            <div id="vue-chart"></div>
+          </div>
+        </section>
 
-      <!-- 操作 -->
-      <div class="btns">
-        <button id="mount">挂载</button>
-        <button id="dispose">销毁</button>
+        <section class="demo-card">
+          <header class="demo-card__title">
+            <span>Vue 3 组件</span>
+            <button type="button" class="demo-card__code" data-example="vue3">示例代码</button>
+          </header>
+          <div class="chart-mount">
+            <!-- Vue 3 会保留挂载容器，需显式撑满 -->
+            <div id="vue3-chart" class="chart-host"></div>
+          </div>
+        </section>
+      </main>
+
+      <!-- 右侧：实时配置面板（Tweakpane） -->
+      <aside class="panel">
+        <div id="config-panel"></div>
+        <p id="data-status" class="data-status" hidden></p>
+      </aside>
+    </div>
+
+    <!-- 示例代码弹窗 -->
+    <div id="code-overlay" class="export-overlay" hidden>
+      <div class="export-dialog" role="dialog" aria-modal="true" aria-labelledby="code-title">
+        <header class="export-dialog__header">
+          <h2 id="code-title">示例代码</h2>
+          <button type="button" id="code-close" class="export-dialog__close" aria-label="关闭">×</button>
+        </header>
+        <p id="code-hint" class="export-dialog__hint"></p>
+        <pre class="export-code"><code id="code-content" class="hljs"></code></pre>
+        <footer class="export-dialog__footer">
+          <button type="button" id="code-copy" class="export-btn export-btn--primary">复制代码</button>
+          <button type="button" id="code-copy-config" class="export-btn">复制配置</button>
+          <span id="code-status" class="export-status" role="status"></span>
+        </footer>
       </div>
     </div>
-    <script src="/dist/build.js"></script>
+
+    <!-- 相对路径，兼容 GitHub Pages 的 /<repo>/ 子路径 -->
+    <script src="./dist/build.js"></script>
   </body>
 </html>

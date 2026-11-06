@@ -26,8 +26,8 @@
 
   // 编辑器文件保存时的操作(MacOS：快捷键是 command + s )，并不能修复所有问题，有些还是需要手动修复
   "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": true,
-    "source.fixAll.stylelint": true
+    "source.fixAll.eslint": "explicit",
+    "source.fixAll.stylelint": "explicit"
   },
 
   "cSpell.words": ["raycaster", "wireframe", "gsap", "phong"]

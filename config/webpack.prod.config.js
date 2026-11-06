@@ -10,6 +10,8 @@ const webpackProdConfig = {
   mode: 'production',
   entry: {
     pieChart3d: './src/plugin/index.js',
+    vue2: './src/vue2/index.js',
+    vue3: './src/vue3/index.js',
   },
   output: {
     path: path.resolve(__dirname, '../es'),
@@ -48,8 +50,10 @@ const webpackProdConfig = {
       gsap: true,
       'd3-shape': true,
       mitt: true,
+      vue: true,
     },
     /^lodash/,
+    /^three\/examples\//,
   ],
   plugins: [new CleanWebpackPlugin(), new MiniCssExtractPlugin()],
 };
