@@ -6,6 +6,17 @@
     <title>3D 饼图示例</title>
     <!-- 相对路径，兼容 GitHub Pages 的 /<repo>/ 子路径 -->
     <link rel="icon" type="image/png" href="./favicon.png" />
+    <!-- 首屏关键样式：在外部 CSS 到达前先铺底色，避免白屏闪烁 -->
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        color: #e5e7eb;
+        background: #0b1120;
+      }
+    </style>
+    <link rel="stylesheet" href="./dist/build.css" />
   </head>
   <body>
     <div class="layout">
